@@ -380,6 +380,7 @@ async def itunes_song_albums(http, artist, title, limit=50):
         seen.add(cid)
         out.append({"collection_id": cid, "album": x.get("collectionName"), "year": (x.get("releaseDate") or "")[:4],
                     "tracks": x.get("trackCount"), "album_artist": x.get("collectionArtistName") or x.get("artistName"),
+                    "art": (x.get("artworkUrl100") or "").replace("100x100bb", "1000x1000bb") or None,
                     "kind": album_kind(x.get("collectionName"), x.get("trackCount"), x.get("collectionArtistName"))})
     return out
 
@@ -1015,7 +1016,7 @@ def fill_artists(app, rec):
         if not t["artist"]:
             t["artist"], changed = k["artist"], True
         if rec.various and k.get("album") and "original" not in t and norm(main_artist(k["artist"])) == norm(main_artist(t["artist"])):
-            t["original"], changed = {"album": k["album"], "year": k["year"]}, True
+            t["original"], changed = {"album": k["album"], "year": k["year"], "art": k.get("art")}, True
     return changed
 
 
@@ -1044,7 +1045,7 @@ async def find_original(app, rec, i):
         return
     if not st or norm(st["album"]) == norm(rec.title):
         return
-    t["original"] = {"album": st["album"], "year": st["year"] or None}
+    t["original"] = {"album": st["album"], "year": st["year"] or None, "art": st.get("art")}
     if rec.idx == i:
         cur = rec.track()
         app["state"].enrich(cur["id"], {"original": t["original"]})
@@ -2891,14 +2892,14 @@ class History:
         if not want:
             return {}
         with self._db() as db:
-            rows = db.execute("SELECT title, artist, album, year FROM plays WHERE ts>? AND artist!='' "
+            rows = db.execute("SELECT title, artist, album, year, art FROM plays WHERE ts>? AND artist!='' "
                               "AND COALESCE(album_artist,'')='' ORDER BY ts DESC LIMIT 20000",
                               (time.time() - days * 86400,)).fetchall()
         out = {}
-        for title, artist, album, year in rows:
+        for title, artist, album, year, art in rows:
             k = norm(clean_title(title))
             if k in want and k not in out and len(k) >= 5 and norm(artist) not in ("various", "variousartists"):   # not "Intro"
-                out[k] = {"artist": artist, "album": album, "year": (re.findall(r"\d{4}", str(year or "")) or [None])[0]}
+                out[k] = {"artist": artist, "album": album, "year": (re.findall(r"\d{4}", str(year or "")) or [None])[0], "art": art}
         return out
 
     def cache_get(self, key, max_age_days=30):

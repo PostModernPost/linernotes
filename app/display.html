@@ -40,6 +40,8 @@
   #title { font-size: calc(var(--ts) * clamp(18px, 5.5vmin, 56px)); font-weight: 650; line-height: 1.1; margin: 0 0 .25em; }
   #artist { font-size: calc(var(--ts) * clamp(14px, 4vmin, 38px)); margin: 0; opacity: .92; }
   #album { font-size: calc(var(--ts) * clamp(12px, 2.9vmin, 26px)); margin: .35em 0 0; color: var(--dim); }
+  #origLine { font-size: calc(var(--ts) * clamp(11px, 2.3vmin, 19px)); margin: .3em 0 0; color: var(--dim); display: none; }
+  #origLine b { color: var(--fg); font-weight: 600; }
   #details { font-size: calc(var(--ts) * clamp(11px, 2.3vmin, 19px)); margin: .35em 0 0; color: var(--dim); }
   /* where it's playing from: plain info text. The medium (vinyl, CD...) is a button that changes it. */
   #source { display: inline-block; margin: 0 0 .7em; font-size: calc(var(--ts) * clamp(10px, 1.9vmin, 15px)); letter-spacing: .08em;
@@ -405,10 +407,10 @@
   #ownAlbum { margin-top: 3vmin; padding-top: 2vmin; border-top: 1px solid var(--faint); }
   #ownAlbum .row { gap: .6em; flex-wrap: wrap; }
   /* settings with several choices: the choices go on their own line under the label */
-  #textSize, #mediaRow, #idleModeRow, #idleOffRow, #pcMediaRow, #phoneOffRow { flex-wrap: wrap; }
+  #textSize, #mediaRow, #compRow, #idleModeRow, #idleOffRow, #pcMediaRow, #phoneOffRow { flex-wrap: wrap; }
   #pcMediaRow .sizes { display: flex; flex-wrap: wrap; gap: .5em; width: 100%; justify-content: flex-start; margin-top: .2em; }
   #textSize .sizes { display: flex; flex-wrap: wrap; gap: .5em; width: 100%; justify-content: flex-start; margin-top: .2em; }
-  #mediaRow .sizes, #idleModeRow .sizes, #idleOffRow .sizes, #phoneOffRow .sizes { display: flex; flex-wrap: wrap; gap: .5em; width: 100%; justify-content: flex-start; margin-top: .2em; }
+  #mediaRow .sizes, #compRow .sizes, #idleModeRow .sizes, #idleOffRow .sizes, #phoneOffRow .sizes { display: flex; flex-wrap: wrap; gap: .5em; width: 100%; justify-content: flex-start; margin-top: .2em; }
   #aboutMark { width: 44px; height: 44px; vertical-align: middle; margin-right: .7em; }
 
   /* listening history and saved songs: a readable width on big screens */
@@ -572,6 +574,7 @@
     <p id="title" class="clamp"></p>
     <p id="artist" class="clamp"></p>
     <p id="album" class="clamp"></p>
+    <p id="origLine" class="clamp"></p>
     <p id="details"></p>
     <div id="progress"><div class="bar"><div id="progFill"></div></div><span id="progText"></span></div>
     <div class="metaRow"><button id="mediumBtn" title="Change what it's playing on" aria-haspopup="true"><span id="mediumBtnText"></span><svg viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></button><button class="heart" id="heartBtn" aria-label="Save this song" title="Save this song"><svg viewBox="0 0 24 24"><path d="M12 20.5s-7.5-4.6-7.5-10.2A4.3 4.3 0 0 1 12 7.6a4.3 4.3 0 0 1 7.5 2.7c0 5.6-7.5 10.2-7.5 10.2z"/></svg></button><button class="heart shareBtn" id="shareBtn" aria-label="Share this song" title="Share this song"><svg viewBox="0 0 24 24"><path d="M12 15V3M7.5 7.5 12 3l4.5 4.5"/><path d="M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7"/></svg></button><button id="infoBtn" aria-label="More about this song" title="More about this song">i</button></div>
@@ -819,6 +822,11 @@
   <div class="setting" id="fsSetting">
     <div>Fullscreen<small id="fsHint">Hides the browser's bars until you leave the page.</small></div><div class="switch"></div></div>
   <h3 style="margin-top:3vmin;margin-bottom:0">On the main screen</h3>
+  <div class="setting" id="compRow" style="cursor:default">
+    <div>On compilations, show<small>For a song on a compilation: the compilation you're playing, the album the song first came out on (its cover and year), or the compilation with a line saying where the song is from.</small></div>
+    <div class="sizes">
+      <button class="pill" data-cm="compilation">The compilation</button><button class="pill" data-cm="original">The original album</button>
+      <button class="pill" data-cm="both">Both</button></div></div>
   <div class="setting" data-key="showYear"><div>Year</div><div class="switch"></div></div>
   <div class="setting" data-key="showLabel"><div>Record label</div><div class="switch"></div></div>
   <div class="setting" data-key="showGenre"><div>Genre</div><div class="switch"></div></div>
@@ -994,7 +1002,7 @@ function esc(s) { return String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","
 
 // ---------------------------------------------------------------- settings (per screen)
 const SETTINGS_DEFAULT = { lyricsBeside: false, textSize: "1.6", showYear: true, showLabel: true, showGenre: true,
-                           showProgress: true, showBpm: false, sideEndPulse: true, idleMode: "both", idleOff: 0 };
+                           showProgress: true, showBpm: false, sideEndPulse: true, compMode: "compilation", idleMode: "both", idleOff: 0 };
 let settings = { ...SETTINGS_DEFAULT };
 try { Object.assign(settings, JSON.parse(localStorage.getItem("coverart-settings") || "{}")); } catch (e) {}
 if (settings.showDetails === false) {          // older single switch
@@ -1043,6 +1051,12 @@ function detailsText(t, all) {
           (all || settings.showGenre) && t.genre, (all || settings.showBpm) && bpm].filter(Boolean).join(" · ");
 }
 
+// A song on a compilation, with its original album known: show the compilation, the original album, or both
+function compView(t) {
+  const o = t && t.original;
+  if (!o || !o.album || settings.compMode !== "original") return t;
+  return { ...t, album: o.album, year: o.year || t.year, label: null, art: o.art || t.art };
+}
 function render(t, keepArt) {
   current = t;
   const idle = !t;
@@ -1054,16 +1068,18 @@ function render(t, keepArt) {
   if (idle) { closePanel("info"); document.body.classList.remove("lyrics-show"); lyr = { id: null }; return; }
   const unknown = t.status !== "playing";
 
+  const v = compView(t);                // what's shown: the compilation's or the original album's details
   const art = $("art");
-  if (!keepArt) {
-    if (t.art) {
+  if (!keepArt || art.dataset.src !== (v.art || "")) {
+    art.dataset.src = v.art || "";
+    if (v.art) {
       art.classList.remove("record");
       art.style.opacity = 0;
       const img = new Image();
-      img.onload = () => { art.src = t.art; art.style.opacity = 1; };
+      img.onload = () => { art.src = v.art; art.style.opacity = 1; };
       img.onerror = () => { art.src = BLANK; art.classList.add("record"); art.style.opacity = 1; };
-      img.src = t.art;
-      $("bg").style.backgroundImage = `url("${t.art}")`;
+      img.src = v.art;
+      $("bg").style.backgroundImage = `url("${v.art}")`;
     } else {
       art.src = BLANK; art.classList.add("record"); art.style.opacity = 1;
       $("bg").style.backgroundImage = "none";
@@ -1071,8 +1087,11 @@ function render(t, keepArt) {
   }
   $("title").textContent = t.title || "";
   $("artist").textContent = t.artist || "";
-  $("album").textContent = t.album || "";
-  const det = detailsText(t);
+  $("album").textContent = v.album || "";
+  const o = t.original, both = settings.compMode === "both" && o && o.album;
+  $("origLine").innerHTML = both ? `Originally on <b>${esc(o.album)}</b>${o.year ? ` (${esc(o.year)})` : ""}` : "";
+  $("origLine").style.display = both && !unknown ? "block" : "none";
+  const det = detailsText(v);
   $("details").textContent = det;
   $("details").style.display = det ? "block" : "none";
   const ROOM = ["turntable", "record", "manual"];
@@ -1097,7 +1116,7 @@ function render(t, keepArt) {
   document.body.classList.toggle("lyrics-show", lyricsOn);
   $("lyTitle").textContent = t.title || "";
   $("lyArtist").textContent = t.artist || "";
-  $("lyAlbum").textContent = t.album || "";
+  $("lyAlbum").textContent = v.album || "";
   if (lyricsOn) loadLyrics(t); else { lyr = { id: null }; $("lyricLines").innerHTML = ""; }
 
   if ($("info").classList.contains("open")) openInfo();
@@ -1575,11 +1594,16 @@ function idleMode() {
 }
 function syncIdleRows() {
   document.querySelectorAll("#idleModeRow [data-im]").forEach(b => b.classList.toggle("on", b.dataset.im === idleMode()));
+  document.querySelectorAll("#compRow [data-cm]").forEach(b => b.classList.toggle("on", b.dataset.cm === (settings.compMode || "compilation")));
   document.querySelectorAll("#idleOffRow [data-io]").forEach(b => b.classList.toggle("on", +b.dataset.io === (+settings.idleOff || 0)));
   $("idleOffHint").textContent = IN_WINDOW
     ? "After this long with nothing playing, the window hides to the tray by the clock. It comes back when the next song starts."
     : "After this long with nothing playing, this screen goes dark and turns off. A phone plugged in over USB turns back on with the next song; other screens come back when you tap them.";
 }
+$("compRow").addEventListener("click", e => {
+  const b = e.target.closest("[data-cm]"); if (!b) return;
+  settings.compMode = b.dataset.cm; saveSettings(); applySettings(); if (current) render(current, true);
+});
 $("idleModeRow").addEventListener("click", e => {
   const b = e.target.closest("[data-im]"); if (!b) return;
   e.stopPropagation(); settings.idleMode = b.dataset.im; saveSettings(); syncIdleRows(); idleOn = null; syncIdle();
