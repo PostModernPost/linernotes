@@ -2590,6 +2590,19 @@ async def _turntable_inner(app, mic, shz):
             app["listen_now_done"] = time.time()
 
         on_record = rec.find(res["title"], res["artist"]) if (rec and res and res.get("title")) else None
+        cur = app["state"].track
+        if res and res.get("title") and not gap and on_record is None and cur and cur.get("status") == "playing" \
+                and cur.get("source") in ("record", "turntable") and cur.get("artist") and not (rec and rec.unconfirmed):
+            # Mid-song, no gap, and Shazam names a different artist: often a bad match on a song it doesn't
+            # know. Believe it only when the next check names the same song.
+            a, b = norm(main_artist(res["artist"])), norm(main_artist(cur["artist"]))
+            sid = make_id(res["artist"], res["title"])
+            if a and b and a not in b and b not in a and app.get("suspect") != sid:
+                app["suspect"] = sid
+                misses = max(misses, 1)              # check again soon
+                log(f"Shazam says '{res['title']}' by {res['artist']} in the middle of {cur['title']}: checking again before switching")
+                continue
+        app.pop("suspect", None)
         if rec and not rec.auto and res and res.get("title") and on_record is None and rec.idx is not None:
             # A record you loaded yourself (a live album, a compilation): Shazam often names the studio
             # version of a song on it, or a song that just sounds alike. Stay on the record unless it
