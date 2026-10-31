@@ -1923,7 +1923,7 @@ async function loadCredits(t) {
   const c = d.credits;
   if (!c) {
     if (d.reason === "no_discogs") { $("creditsBox").style.display = "none"; return; }
-    box.textContent = d.reason === "error" ? "Couldn't reach Discogs for the credits." : "Discogs doesn't list this album.";
+    box.textContent = "No credits found for this song on Discogs or MusicBrainz.";
     return;
   }
   const people = list => `<div class="cgrid">${list.map(x => `<div class="cr"><b>${esc(x.name)}</b><span>${esc(x.roles.join(", "))}</span></div>`).join("")}</div>`;
@@ -1934,8 +1934,10 @@ async function loadCredits(t) {
   if (c.companies.length) html += `<h4>Recorded, mastered and pressed</h4>${rows(c.companies)}`;
   if (c.notes && !$("albumInfo").dataset.notes) html += `<h4>Notes</h4><div class="notes">${esc(c.notes)}</div>`;   // shown with the album when it has them
   if (c.empty) html = `<p style="margin:0">Discogs has this album but no credits for it yet.</p>`;
-  html += `<p class="src muted">From Discogs${c.exact ? ", the record you loaded" : ", the closest match"}: ${esc(c.pressing || c.release)}` +
-    (c.url ? ` · <a href="${esc(c.url)}" target="_blank" rel="noopener">See it on Discogs</a>` : "") + `</p>`;
+  const src = c.source || "Discogs";
+  html += `<p class="src muted">From ${src}${c.exact ? ", the record you loaded" : ", the closest match"}: ${esc(c.pressing || c.release)}` +
+    (c.url ? ` · <a href="${esc(c.url)}" target="_blank" rel="noopener">See it on ${src}</a>` : "") +
+    (c.song_source ? ` · Song credits from <a href="${esc(c.song_url)}" target="_blank" rel="noopener">${esc(c.song_source)}</a>` : "") + `</p>`;
   box.className = ""; box.innerHTML = html;
 }
 

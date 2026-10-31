@@ -4498,6 +4498,79 @@ def release_credits(rel, title=None, position=None):
             "release": f"{join_artists(rel.get('artists'))} - {rel.get('title')}"}
 
 
+def _mb_people(rels):
+    """MusicBrainz relationships as credits: "Lindsey Buckingham: Guitar, Producer"."""
+    out = []
+    for r in rels or []:
+        ar = r.get("artist") or {}
+        who = r.get("target-credit") or ar.get("name")
+        if who and not re.search(r"[A-Za-z]", who) and re.search(r"[A-Za-z]", ar.get("sort-name") or ""):
+            last, _, first = ar["sort-name"].partition(", ")             # a name in its own script: "Oleartchik, Max"
+            who = f"{first} {last}".strip()
+        if not who:
+            continue
+        kind, attrs = r.get("type") or "", [a for a in r.get("attributes") or [] if a not in ("additional", "guest", "solo")]
+        if kind in ("instrument", "vocal"):
+            roles = [re.sub(r"\s*\(.*?\)", "", a[:1].upper() + a[1:]) for a in attrs] or (["Vocals"] if kind == "vocal" else ["Instruments"])
+        elif kind in ("performer", "performing orchestra", "conductor", "chorus master"):
+            roles = [kind.capitalize()]
+        else:                                    # producer, engineer, mix, mastering, composer, lyricist...
+            roles = [kind.replace("mix", "mixing").capitalize() if kind == "mix" else kind.capitalize()]
+        out += [{"name": who, "role": role} for role in roles]
+    return _group(out)
+
+
+async def musicbrainz_credits(http, artist, title, album=None):
+    """Credits from MusicBrainz, for songs Discogs has no credits for: who played, sang, wrote and produced
+    it (the recording), and who worked on the album (the release)."""
+    key = ("mb-credits", norm(artist), norm(title), norm(album))
+    if key in _credits_cache:
+        return _credits_cache[key]
+    q = lambda x: (x or "").replace("\\", " ").replace('"', " ")
+    d = await _mb_get(http, "/recording", {"query": f'recording:"{q(clean_title(title))}" AND artist:"{q(main_artist(artist))}"',
+                                            "limit": "25"})
+    if d is None:
+        return None                              # couldn't reach it: try again next time
+    want_a, want_t, want_al = norm(main_artist(artist)), norm(clean_title(title)), norm(bare_album(album or ""))
+    picks = []
+    for r in d.get("recordings") or []:
+        credit = " ".join(a.get("name", "") for a in r.get("artist-credit") or [] if isinstance(a, dict))
+        if want_a not in norm(credit) or norm(clean_title(r.get("title"))) != want_t:
+            continue
+        rels = [x for x in r.get("releases") or [] if want_al and norm(bare_album(x.get("title"))) == want_al]
+        picks.append((0 if rels else 1, r, rels[0] if rels else None))
+    picks.sort(key=lambda x: x[0])
+    song, rec_id, rel = [], None, None
+    for _, r, rl in picks[:3]:                   # the one with credits, on this album first
+        full = await _mb_get(http, f"/recording/{r['id']}", {"inc": "artist-rels+work-rels+work-level-rels"})
+        rels = list((full or {}).get("relations") or [])
+        for w in list(rels):
+            rels += ((w.get("work") or {}).get("relations") or []) if w.get("type") == "performance" else []
+        got = _mb_people([x for x in rels if x.get("artist")])
+        rel = rel or rl
+        if got:
+            song, rec_id, rel = got, r["id"], rl or rel
+            break
+    album_people, companies = [], []
+    if rel:
+        full = await _mb_get(http, f"/release/{rel['id']}", {"inc": "artist-rels+label-rels+labels"})
+        album_people = _mb_people([x for x in (full or {}).get("relations") or [] if x.get("artist")])
+        labs = collections.OrderedDict()
+        for x in (full or {}).get("relations") or []:
+            if x.get("label") and x.get("type"):
+                names = labs.setdefault(x["type"].capitalize(), [])
+                if x["label"].get("name") not in names:
+                    names.append(x["label"]["name"])
+        companies = [{"role": r, "names": n} for r, n in labs.items()]
+    cr = None
+    if song or album_people or companies:
+        url = f"https://musicbrainz.org/recording/{rec_id}" if rec_id else f"https://musicbrainz.org/release/{rel['id']}"
+        cr = {"song": song, "album": album_people, "companies": companies, "notes": None, "pressing": None,
+              "url": url, "position": None, "release": f"{artist} - {album or title}", "source": "MusicBrainz", "exact": False}
+    _credits_cache[key] = cr
+    return cr
+
+
 async def find_release(http, artist, album, medium=None):
     """The Discogs release that best matches an album, preferring the format being played."""
     key = (norm(artist), norm(album), medium)
@@ -4616,8 +4689,6 @@ async def api_credits(request):
     t = st.history.get(request.query.get("id", ""))
     if not t or not t.get("artist"):
         return web.json_response({"credits": None})
-    if not discogs_ready():
-        return web.json_response({"credits": None, "reason": "no_discogs"})
     cache_key = ("credits", t["id"])
     if cache_key in _credits_cache:
         return web.json_response({"credits": _credits_cache[cache_key]})
@@ -4630,7 +4701,7 @@ async def api_credits(request):
         if t.get("source") == "record" and rec is not None and getattr(rec, "rel", None):
             cr = release_credits(rec.rel, t.get("title"), t.get("record_pos"))
             cr["exact"] = True
-        elif t.get("album"):
+        elif t.get("album") and discogs_ready():
             rel = await find_release(app["http"], t["artist"], t["album"], t.get("medium"))
             cr = release_credits(rel, t.get("title")) if rel else None
             if cr:
@@ -4639,8 +4710,21 @@ async def api_credits(request):
             cr = None
     except Exception as e:
         log("credits lookup failed:", repr(e))
-        return web.json_response({"credits": None, "reason": "error"})
-    if cr and not (cr["song"] or cr["album"] or cr["companies"] or cr["notes"]):
+        cr = None
+    if not cr or not cr["song"]:                 # Discogs has nothing for this song: ask MusicBrainz
+        try:
+            mb = await musicbrainz_credits(app["http"], t["artist"], t["title"], t.get("album"))
+        except Exception as e:
+            log("credits lookup (MusicBrainz) failed:", repr(e))
+            mb = None
+        if mb and cr:
+            cr = {**cr, "song": mb["song"], "song_source": "MusicBrainz", "song_url": mb["url"],
+                  "album": cr["album"] or mb["album"], "companies": cr["companies"] or mb["companies"]}
+        elif mb:
+            cr = mb
+    if not cr:
+        return web.json_response({"credits": None, "reason": None if discogs_ready() else "no_discogs"})
+    if not (cr["song"] or cr["album"] or cr["companies"] or cr["notes"]):
         cr = {**cr, "empty": True}
     _credits_cache[cache_key] = cr
     if cr:
