@@ -3303,6 +3303,7 @@ async def api_records_load(request):
     save_record(rec)
     log(f"record loaded: {rec.artist} - {rec.title} ({len(rec.tracks)} tracks)")
     i = None
+    cur = app["state"].track
     if body.get("keep") and old is not None and old.idx is not None:
         i = rec.find(old.tracks[old.idx]["title"], old.track()["artist"])
     if i is not None:                               # another pressing of the same record: same song, same place
@@ -3310,6 +3311,14 @@ async def api_records_load(request):
         rec.track_started, rec.exact_start = old.track_started, getattr(old, "exact_start", False)
         show_record(app, rec, rec.track())
         log(f"switched pressing, still on {rec.tracks[i]['pos']}")
+    elif body.get("keep") and cur and cur.get("status") == "playing" and \
+            (i := rec.find(cur.get("title"), cur.get("artist"))) is not None:
+        rec.set_index(i)                            # the album for the song playing now: start the record there
+        p = progress_now(app)
+        if p and p.get("pos") is not None:
+            rec.track_started, rec.exact_start = time.time() - p["pos"], p.get("kind") == "exact"
+        show_record(app, rec, rec.track())
+        log(f"album changed, on {rec.tracks[i]['pos']}")
     elif app.get("listen_mode") == "active":        # already playing: start at track 1, Shazam will correct it
         show_record(app, rec, rec.set_index(0))
         app["force_check"] = True
@@ -4407,6 +4416,56 @@ async def find_release(http, artist, album, medium=None):
     return rel
 
 
+async def album_wiki(http, artist, album):
+    """The album's own Wikipedia page, when it has one (and it's about this artist's album)."""
+    name = bare_album(album)
+    for title in (f"{name} ({main_artist(artist)} album)", f"{name} (album)", name):
+        try:
+            got = await _wiki_summary(http, title)
+        except Exception:
+            got = None
+        if got and "album" in (got.get("text") or "").lower()[:400] and norm(main_artist(artist)) in norm(got.get("text") or ""):
+            return got
+    return None
+
+
+async def api_album(request):
+    """The song page's album section: the release (the record being followed, or the closest Discogs match),
+    its details, tracklist, the liner notes on Discogs, and the album's Wikipedia page."""
+    app = request.app
+    st: State = app["state"]
+    t = st.history.get(request.query.get("id", ""))
+    if not t or not t.get("album"):
+        return web.json_response({"album": None})
+    http, rec, rel, exact = app["http"], app.get("record"), None, False
+    if t.get("source") == "record" and rec is not None and getattr(rec, "rel", None) and rec.rel.get("id"):
+        rel, exact = rec.rel, True
+    elif discogs_ready():
+        try:
+            rel = await find_release(http, t.get("album_artist") or t["artist"], t["album"], t.get("medium"))
+        except Exception as e:
+            log("album lookup failed:", repr(e))
+    artist = t.get("album_artist") or t["artist"]
+    wiki = await album_wiki(http, artist, t["album"])
+    out = {"title": t["album"], "artist": artist, "year": t.get("year"), "art": t.get("art"), "exact": exact,
+           "wiki": wiki, "record": t.get("source") == "record"}
+    if rel:
+        row = release_row(rel)
+        tracks, cur = [], norm(clean_title(t.get("title")))
+        for x in rel.get("tracklist") or []:
+            if x.get("type_", "track") != "track":
+                continue
+            tracks.append({"pos": (x.get("position") or "").strip(), "title": x.get("title"), "duration": x.get("duration"),
+                           "artist": join_artists(x.get("artists")) or track_performer(x),
+                           "now": norm(clean_title(x.get("title"))) == cur})
+        out.update({"label": row["label"], "catno": row["catno"], "format": row["formats"], "country": rel.get("country"),
+                    "released": rel.get("released_formatted") or rel.get("released"), "release_year": row["year"],
+                    "genres": (rel.get("genres") or []) + (rel.get("styles") or []), "tracks": tracks,
+                    "notes": _discogs_markup(rel.get("notes"))[:4000] or None, "url": rel.get("uri"),
+                    "release_id": rel.get("id")})
+    return web.json_response({"album": out})
+
+
 async def api_credits(request):
     app = request.app
     st: State = app["state"]
@@ -5231,6 +5290,7 @@ def build_app(demo=False):
     app.router.add_get("/api/records/search", api_records_search)
     app.router.add_get("/api/records/guess", api_records_guess)
     app.router.add_get("/api/records/pressings", api_records_pressings)
+    app.router.add_get("/api/album", api_album)
     app.router.add_post("/api/records/load", api_records_load)
     app.router.add_post("/api/records/position", api_records_position)
     app.router.add_post("/api/records/clear", api_records_clear)

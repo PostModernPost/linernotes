@@ -459,6 +459,18 @@
   #credits .cr b { font-weight: 500; }
   #credits h4 { margin: 1.6em 0 .5em; font-size: .8em; letter-spacing: .1em; text-transform: uppercase; color: var(--gold); font-weight: 600; }
   #credits h4:first-child { margin-top: 0; }
+  #albumInfo .ahead { display: flex; gap: 1em; align-items: flex-start; }
+  #albumInfo .ahead img { width: 7em; height: 7em; border-radius: 6px; object-fit: cover; flex: none; background: #1a1a1d; }
+  #albumInfo .ahead b { display: block; font-size: 1.1em; color: var(--fg); }
+  #albumInfo .meta { color: var(--dim); margin-top: .25em; line-height: 1.45; }
+  #albumInfo .genres { margin-top: .5em; display: flex; flex-wrap: wrap; gap: .4em; }
+  #albumInfo .genres span { font-size: .8em; border: 1px solid var(--faint); border-radius: 99px; padding: .15em .7em; color: var(--dim); }
+  #albumInfo .row { margin-top: .9em; }
+  #albumInfo .wiki { margin-top: 1em; line-height: 1.55; }
+  #albumInfo details { margin-top: 1em; } #albumInfo summary { cursor: pointer; color: var(--fg); }
+  #albumInfo .atr { display: flex; gap: .8em; padding: .3em 0; color: var(--dim); } #albumInfo .atr.now { color: var(--gold); }
+  #albumInfo .atr .p { width: 2.6em; flex: none; } #albumInfo .atr .t { flex: 1; color: var(--fg); } #albumInfo .atr.now .t { color: var(--gold); }
+  #albumInfo .lnotes { white-space: pre-wrap; line-height: 1.55; color: var(--fg); opacity: .85; margin-top: .5em; }
   #credits .notes { white-space: pre-wrap; color: var(--fg); opacity: .85; line-height: 1.5; max-width: 60em; }
   #credits .src { margin-top: 1.4em; font-size: .85em; }
   #credits a { color: var(--gold); }
@@ -634,7 +646,8 @@
   <div class="row" style="margin-top:1.2em"><button class="pill" id="iShare">Share this song</button></div>
   <div id="links" class="row"></div>
   <div class="cols">
-    <div><section><h3>About the artist</h3><div id="bio" class="muted">Loading…</div></section>
+    <div><section id="albumBox"><h3>About the album</h3><div id="albumInfo" class="muted">Loading…</div></section>
+      <section style="margin-top:5vmin"><h3>About the artist</h3><div id="bio" class="muted">Loading…</div></section>
       <section id="similarBox" style="margin-top:5vmin"><h3>More like this</h3><div id="similar" class="muted">Loading…</div></section>
       <section id="creditsBox" style="margin-top:5vmin"><h3>Credits</h3><div id="credits" class="muted">Loading…</div></section></div>
     <section><h3>Lyrics</h3><div id="lyrics" class="muted">Loading…</div></section>
@@ -1239,7 +1252,7 @@ $("recResults").addEventListener("click", async e => {
   const row = e.target.closest(".result"); if (!row) return;
   row.style.opacity = .5;
   const d = await (await fetch("/api/records/load", { method: "POST", headers: { "Content-Type": "application/json" },
-                                                      body: JSON.stringify({ id: row.dataset.id }) })).json();
+                                                      body: JSON.stringify({ id: row.dataset.id, keep: true }) })).json();
   if (!d.ok) { row.style.opacity = 1; $("recResults").insertAdjacentHTML("afterbegin", `<p class="muted">${esc(d.error || "Couldn't load it.")}</p>`); return; }
   record = d.record; recView = "list"; $("recResults").innerHTML = ""; $("songResults").innerHTML = ""; $("rq").value = ""; renderRecords(); poll();
 });
@@ -1832,6 +1845,7 @@ async function openInfo(t) {
   } else {
     $("bio").textContent = "No bio found. Try the Bandcamp or Discogs links above.";
   }
+  loadAlbum(t);
   loadCredits(t);
   loadSimilar(t);
   if (d.shazam && !$("links").querySelector("[data-shazam]"))
@@ -1863,6 +1877,40 @@ async function loadSimilar(t) {
 }
 
 // ---------------------------------------------------------------- credits on the info page
+// The song page's album section: details, the album's story, tracklist, liner notes, and changing the album
+async function loadAlbum(t) {
+  const box = $("albumInfo");
+  box.className = "muted"; box.textContent = "Loading…"; box.dataset.notes = "";
+  $("albumBox").style.display = t.album ? "block" : "none";
+  if (!t.album) return;
+  let d = {};
+  try { d = await (await fetch("/api/album?id=" + encodeURIComponent(t.id))).json(); } catch (e) {}
+  if (infoFor !== t.id) return;
+  const a = d.album;
+  if (!a) { box.textContent = "Couldn't find this album's details."; return; }
+  const year = oneYear(a.year) || oneYear(a.release_year);
+  const pressing = [a.label, a.catno, a.format, a.country, a.release_year && a.release_year !== year ? `pressed ${a.release_year}` : ""].filter(Boolean).join(" · ");
+  let html = `<div class="ahead"><img src="${esc(a.art || BLANK)}" alt="">
+    <div><b>${esc(a.title)}</b><div class="meta">${esc([a.artist, year].filter(Boolean).join(" · "))}</div>
+    ${pressing ? `<div class="meta">${esc(pressing)}</div>` : ""}
+    ${(a.genres || []).length ? `<div class="genres">${[...new Set(a.genres)].slice(0, 6).map(g => `<span>${esc(g)}</span>`).join("")}</div>` : ""}</div></div>
+    <div class="row">${a.record ? `<button class="pill" data-alb="press">Wrong pressing?</button>` : ""}<button class="pill" data-alb="change">Change album</button></div>`;
+  if (a.wiki && a.wiki.text) html += `<div class="wiki">${esc(a.wiki.text)}${a.wiki.url ? ` <a href="${esc(a.wiki.url)}" target="_blank" rel="noopener">More on Wikipedia</a>` : ""}</div>`;
+  if ((a.tracks || []).length) html += `<details${a.exact ? " open" : ""}><summary>Tracklist</summary>${a.tracks.map(x => `
+      <div class="atr${x.now ? " now" : ""}"><span class="p">${esc(x.pos)}</span><span class="t">${esc(x.title)}${x.artist && x.artist !== a.artist ? ` · ${esc(x.artist)}` : ""}</span><span>${esc(x.duration || "")}</span></div>`).join("")}</details>`;
+  if (a.notes) html += `<details><summary>Liner notes</summary><div class="lnotes">${esc(a.notes)}</div></details>`;
+  if (a.url) html += `<p class="src muted">From Discogs${a.exact ? ", the record you loaded" : ", the closest match"} · <a href="${esc(a.url)}" target="_blank" rel="noopener">See it on Discogs</a></p>`;
+  box.className = ""; box.innerHTML = html;
+  box.dataset.notes = a.notes ? "1" : "";
+  if (a.notes) { const n = $("credits").querySelector(".notes"); if (n) { n.previousElementSibling && n.previousElementSibling.remove(); n.remove(); } }
+}
+$("albumInfo").addEventListener("click", e => {
+  const b = e.target.closest("[data-alb]"); if (!b) return;
+  e.stopPropagation();
+  if (b.dataset.alb === "press") { openRecords(); loadPressings(""); }
+  else if (current) openGuesses("studio", current.album_artist && current.album_artist !== "Various Artists" ? current.album_artist : current.artist, current.title);
+});
+
 async function loadCredits(t) {
   const box = $("credits");
   box.className = "muted"; box.textContent = "Loading…";
@@ -1883,7 +1931,7 @@ async function loadCredits(t) {
   if (c.song.length) html += `<h4>On this song</h4>${people(c.song)}`;
   if (c.album.length) html += `<h4>On the album</h4>${people(c.album)}`;
   if (c.companies.length) html += `<h4>Recorded, mastered and pressed</h4>${rows(c.companies)}`;
-  if (c.notes) html += `<h4>Notes</h4><div class="notes">${esc(c.notes)}</div>`;
+  if (c.notes && !$("albumInfo").dataset.notes) html += `<h4>Notes</h4><div class="notes">${esc(c.notes)}</div>`;   // shown with the album when it has them
   if (c.empty) html = `<p style="margin:0">Discogs has this album but no credits for it yet.</p>`;
   html += `<p class="src muted">From Discogs${c.exact ? ", the record you loaded" : ", the closest match"}: ${esc(c.pressing || c.release)}` +
     (c.url ? ` · <a href="${esc(c.url)}" target="_blank" rel="noopener">See it on Discogs</a>` : "") + `</p>`;
