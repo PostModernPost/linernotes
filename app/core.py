@@ -320,7 +320,8 @@ async def itunes_lookup(http, artist, title):
             if norm(res.get("trackName")) == norm(title):
                 best = res
                 break
-            best = best or res
+            if not best and norm(clean_title(res.get("trackName"))) == norm(clean_title(title)):
+                best = res                     # "Song (feat. Someone)" or "Song - 2011 Remaster"
         if best:
             info = itunes_fields(best)
             info["label"] = await itunes_label(http, info["collection_id"])
@@ -830,6 +831,9 @@ async def deezer_lookup(http, artist, title):
         q = f'artist:"{artist}" track:"{title}"'
         async with http.get(f"{DEEZER}/search", params={"q": q, "limit": 8}) as r:
             data = await r.json(content_type=None)
+        if not data.get("data"):                 # the exact search misses some songs a plain one finds
+            async with http.get(f"{DEEZER}/search", params={"q": f"{main_artist(artist)} {clean_title(title)}", "limit": 8}) as r:
+                data = await r.json(content_type=None)
         best = None
         for d in data.get("data") or []:
             a, b = norm(artist), norm((d.get("artist") or {}).get("name"))
@@ -837,14 +841,16 @@ async def deezer_lookup(http, artist, title):
                 if norm(d.get("title")) == norm(title) or norm(d.get("title_short")) == norm(title):
                     best = d
                     break
-                best = best or d
+                if not best and norm(clean_title(d.get("title"))) == norm(clean_title(title)):
+                    best = d
         if best:
             async with http.get(f"{DEEZER}/track/{best['id']}") as r:
                 tr = await r.json(content_type=None)
             info = {"bpm": round(tr["bpm"]) if tr.get("bpm") else None,
                     "duration_ms": (tr.get("duration") or 0) * 1000 or None,
                     "year": (tr.get("release_date") or "")[:4] or None,
-                    "album": (tr.get("album") or {}).get("title"), "label": None, "genre": None}
+                    "album": (tr.get("album") or {}).get("title"), "label": None, "genre": None,
+                    "art": (tr.get("album") or {}).get("cover_xl")}
             album_id = (tr.get("album") or {}).get("id")
             if album_id:
                 async with http.get(f"{DEEZER}/album/{album_id}") as r:
@@ -968,10 +974,15 @@ async def enrich_track(app, t):
         need_label = not t.get("label") or tidy_label(t["label"]) == itunes_lab
         merged = {**t, **fields}
         dz = {}
-        if not merged.get("bpm") or need_label or any(not merged.get(k) for k in ("year", "genre", "duration_ms")):
+        same_album = lambda x: not t.get("album") or norm(bare_album(x.get("album"))) == norm(bare_album(t["album"]))
+        if not t.get("art") and it.get("art") and same_album(it):
+            fields["art"] = it["art"]
+        if not merged.get("bpm") or need_label or any(not merged.get(k) for k in ("year", "genre", "duration_ms", "art")):
             dz = await deezer_lookup(http, t["artist"], t["title"]) or {}
             fields.update({k: dz.get(k) for k in ("bpm", "year", "genre", "duration_ms", "album")
                            if not merged.get(k) and dz.get(k)})
+            if not t.get("art") and not fields.get("art") and dz.get("art") and same_album(dz):
+                fields["art"] = dz["art"]
         if need_label:
             better = await musicbrainz_label(http, t["artist"], t["title"], merged.get("album")) or dz.get("label")
             if better or not t.get("label"):
@@ -1436,9 +1447,18 @@ def show_duration(app, rec, i):
         record_progress(app, rec)
 
 
-async def album_lengths(http, artist, album, various=False):
-    """The same album on Deezer, then Apple Music: each one's songs as [(title, seconds)], best match first."""
+async def album_lengths(http, artist, album, various=False, rel=None):
+    """The same album elsewhere, each one's songs as [(title, seconds)]: Discogs' main release of the album,
+    Deezer, Apple Music, then other pressings on Discogs. Each fills in what the ones before it lacked."""
     want_a, want_t = norm(main_artist(artist)), norm(bare_album(album))
+    mid = (rel or {}).get("master_id")
+    if mid and discogs_ready():
+        try:
+            m = await discogs_get(http, f"/masters/{int(mid)}")
+            if m.get("main_release") != rel.get("id"):
+                yield [(x.get("title"), parse_duration(x.get("duration"))) for x in m.get("tracklist") or []]
+        except Exception as e:
+            log("song lengths (Discogs) failed:", repr(e))
     ok = lambda a, t: norm(bare_album(t)) == want_t and (various or (want_a and a and (want_a in a or a in want_a)))
     try:
         q = f'artist:"{main_artist(artist)}" album:"{bare_album(album)}"' if not various else bare_album(album)
@@ -1460,6 +1480,16 @@ async def album_lengths(http, artist, album, various=False):
                 yield [(t["title"], t["duration"]) for t in apple.tracks]
     except Exception as e:
         log("song lengths (Apple Music) failed:", repr(e))
+    if mid and discogs_ready():
+        try:
+            v = await discogs_get(http, f"/masters/{int(mid)}/versions", {"per_page": "25"})
+            others = [x["id"] for x in v.get("versions") or [] if x.get("id") and x["id"] != rel.get("id")]
+            for vid in others[:3]:
+                r = await discogs_get(http, f"/releases/{vid}")
+                yield [(x.get("title"), parse_duration(x.get("duration"))) for x in r.get("tracklist") or []
+                       if x.get("type_", "track") == "track"]
+        except Exception as e:
+            log("song lengths (other pressings) failed:", repr(e))
 
 
 async def album_durations(app, rec):
@@ -1468,7 +1498,7 @@ async def album_durations(app, rec):
     if all(t["duration"] for t in rec.tracks) or not rec.title:
         return
     filled, src = 0, None
-    async for songs in album_lengths(app["http"], rec.artist, rec.title, rec.various):
+    async for songs in album_lengths(app["http"], rec.artist, rec.title, rec.various, rec.rel):
         lengths = {norm(clean_title(n)): secs for n, secs in songs if n and secs}
         for i, t in enumerate(rec.tracks):
             secs = None if t["duration"] else lengths.get(norm(clean_title(t["title"])))
@@ -4497,6 +4527,24 @@ async def album_wiki(http, artist, album):
             got = None
         if got and "album" in (got.get("text") or "").lower()[:400] and norm(main_artist(artist)) in norm(got.get("text") or ""):
             return got
+    if LASTFM_KEY:                               # Last.fm has write-ups for lots of albums Wikipedia doesn't
+        try:
+            async with http.get(LASTFM_API, params={"method": "album.getInfo", "artist": main_artist(artist), "album": name,
+                                                    "api_key": LASTFM_KEY, "autocorrect": "1", "format": "json"}) as r:
+                a = ((await r.json(content_type=None)) or {}).get("album") or {}
+            text = (a.get("wiki") or {}).get("content") or (a.get("wiki") or {}).get("summary") or ""
+            text = re.sub(r"<a [^>]*>Read more on Last\.fm</a>\.?", "", text)
+            text = re.sub(r"User-contributed text is available under the Creative Commons.*$", "", text, flags=re.S)
+            text = re.sub(r"[ \t]+", " ", re.sub(r"<[^>]+>", "", text)).strip()
+            if len(text) >= 60:
+                paras, short = [p.strip() for p in re.split(r"\n\s*\n", text) if p.strip()], ""
+                for p in paras:
+                    if len(short) > 600:
+                        break
+                    short = (short + "\n\n" + p).strip()
+                return {"text": short, "url": a.get("url"), "image": None, "source": "Last.fm"}
+        except Exception as e:
+            log("album story (Last.fm) failed:", repr(e))
     return None
 
 
@@ -4534,6 +4582,31 @@ async def api_album(request):
                     "genres": (rel.get("genres") or []) + (rel.get("styles") or []), "tracks": tracks,
                     "notes": _discogs_markup(rel.get("notes"))[:4000] or None, "url": rel.get("uri"),
                     "release_id": rel.get("id")})
+    def fill(songs):
+        if not out.get("tracks"):                      # no Discogs release: the tracklist from Deezer or Apple Music
+            cur = norm(clean_title(t.get("title")))
+            out["tracks"] = [{"pos": str(n + 1), "title": name, "duration": None, "artist": None,
+                              "now": norm(clean_title(name)) == cur} for n, (name, _) in enumerate(songs) if name]
+        lengths = {norm(clean_title(n)): secs for n, secs in songs if n and secs}
+        for x in out["tracks"]:
+            secs = None if x["duration"] else lengths.get(norm(clean_title(x["title"])))
+            if secs:
+                x["duration"] = f"{int(secs) // 60}:{int(secs) % 60:02d}"
+        return out["tracks"] and all(x["duration"] for x in out["tracks"])
+    if not out.get("tracks") or any(not x["duration"] for x in out["tracks"]):
+        if rec is not None and rel is not None and rel is rec.rel:     # the record being followed already has them filled in
+            fill([(x["title"], x["duration"]) for x in rec.tracks])
+        else:
+            try:
+                async for songs in album_lengths(http, artist, t["album"], artist == "Various Artists", rel):
+                    if fill(songs):
+                        break
+            except Exception as e:
+                log("album lengths failed:", repr(e))
+    if not out.get("genres") and t.get("genre"):
+        out["genres"] = [t["genre"]]
+    if not out.get("label") and t.get("label"):
+        out["label"] = t["label"]
     return web.json_response({"album": out})
 
 
@@ -4615,14 +4688,16 @@ async def similar_artists(http, artist, limit=8):
                     names.append({"name": a["name"], "match": float(a.get("match") or 0), "lastfm": a.get("url")})
         except Exception as e:
             log("similar artists (Last.fm) failed:", repr(e))
-    if not names:
+    if len(names) < limit // 2:                  # Last.fm knows few or none: add Deezer's related artists
         me = await _deezer_artist(http, lead)
         if me and me.get("id"):
             try:
                 async with http.get(f"{DEEZER}/artist/{me['id']}/related", params={"limit": str(limit)}) as r:
                     d = await r.json(content_type=None)
+                have = {norm(x["name"]) for x in names}
                 for a in (d or {}).get("data") or []:
-                    names.append({"name": a.get("name"), "image": a.get("picture_medium"), "match": None})
+                    if a.get("name") and norm(a["name"]) not in have and norm(a["name"]) != key:
+                        names.append({"name": a.get("name"), "image": a.get("picture_medium"), "match": None})
             except Exception as e:
                 log("similar artists (Deezer) failed:", repr(e))
     names = names[:limit]
