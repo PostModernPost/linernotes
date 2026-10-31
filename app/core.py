@@ -2518,7 +2518,10 @@ async def _turntable_inner(app, mic, shz):
             jumped = on_record is not None and on_record not in ok
             if on_record is None or jumped:
                 # Not on the guessed release, or not where it should be (a best-of, not the album): guess again
-                prev_song = {"title": rec.tracks[rec.idx]["title"], "artist": rec.track()["artist"]}
+                # the song before, to work out the record from two: only one Shazam actually heard on this record,
+                # not the next song it guessed after a side ended (that's often a new record going on)
+                if getattr(rec, "exact_start", False) and not rec.unconfirmed:
+                    prev_song = {"title": rec.tracks[rec.idx]["title"], "artist": rec.track()["artist"]}
                 log(f"'{res['title']}' {'is not next' if on_record is not None else 'is not'} on {rec.title}: dropping that guess")
                 app["record"] = rec = None
                 save_record(None)

@@ -1255,6 +1255,7 @@ $("recResults").addEventListener("click", async e => {
                                                       body: JSON.stringify({ id: row.dataset.id, keep: true }) })).json();
   if (!d.ok) { row.style.opacity = 1; $("recResults").insertAdjacentHTML("afterbegin", `<p class="muted">${esc(d.error || "Couldn't load it.")}</p>`); return; }
   record = d.record; recView = "list"; $("recResults").innerHTML = ""; $("songResults").innerHTML = ""; $("rq").value = ""; renderRecords(); poll();
+  closePanel("records"); closePanel("info");      // back to the main screen with the record you picked
 });
 $("recTracks").addEventListener("click", async e => {
   const row = e.target.closest(".trk"); if (!row) return;
@@ -1290,7 +1291,7 @@ $("pressList").addEventListener("click", async e => {
                                                      body: JSON.stringify({ id: row.dataset.press, keep: true }) })).json(); } catch (err) {}
   if (!d.ok) { row.style.opacity = 1; toast(d.error || "Couldn't load that pressing."); return; }
   record = d.record; $("pressBox").style.display = "none"; renderRecords(); poll();
-  toast("Switched to that pressing.");
+  closePanel("records"); toast("Switched to that pressing.");
 });
 $("recDone").addEventListener("click", async () => { await fetch("/api/records/clear", { method: "POST" }); record = null; recView = "pick"; renderRecords(); poll(); });
 $("recTokenSave").addEventListener("click", async () => {
