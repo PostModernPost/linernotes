@@ -1032,6 +1032,7 @@ def show_record(app, rec, track):
     if not getattr(rec, "orig_checked", False):
         rec.orig_checked = True
         asyncio.create_task(original_year(app, rec))
+        asyncio.create_task(album_durations(app, rec))
 
 
 async def find_original(app, rec, i):
@@ -1402,17 +1403,84 @@ async def itunes_album_record(http, collection_id, medium=None):
     return rec
 
 
-async def fill_duration(http, rec, i):
+async def fill_duration(http, rec, i, app=None):
     """The tracklist didn't say how long this song is: ask Apple Music, so its end can be judged."""
     try:
         t = rec.tracks[i]
         info = await itunes_lookup(http, t["artist"] or rec.artist, t["title"]) or {}
+        if norm(clean_title(info.get("title"))) != norm(clean_title(t["title"])):
+            return                                   # a different song (or a remix): no length is better than a wrong one
         secs = round((info.get("duration_ms") or 0) / 1000)
         if secs and not rec.tracks[i]["duration"]:
             rec.tracks[i]["duration"] = secs
             log(f"{t['pos']} is {secs // 60}:{secs % 60:02d} long (Apple Music)")
+            if app is not None:
+                show_duration(app, rec, i)
     except Exception as e:
         log("song length lookup failed:", repr(e))
+
+
+def show_duration(app, rec, i):
+    """A song's length turned up after it went on screen: show its time now."""
+    if app.get("record") is not rec or rec.idx != i:
+        return
+    secs = rec.tracks[i]["duration"]
+    tid = rec.track()["id"]
+    st = app["state"]
+    if st.track and st.track.get("id") == tid:
+        st.track["duration_ms"] = secs * 1000
+    p = app.get("progress")
+    if p and p["id"] == tid:
+        p["dur_s"] = secs
+    else:
+        record_progress(app, rec)
+
+
+async def album_lengths(http, artist, album, various=False):
+    """The same album on Deezer, then Apple Music: each one's songs as [(title, seconds)], best match first."""
+    want_a, want_t = norm(main_artist(artist)), norm(bare_album(album))
+    ok = lambda a, t: norm(bare_album(t)) == want_t and (various or (want_a and a and (want_a in a or a in want_a)))
+    try:
+        q = f'artist:"{main_artist(artist)}" album:"{bare_album(album)}"' if not various else bare_album(album)
+        async with http.get(f"{DEEZER}/search/album", params={"q": q, "limit": "10"}) as r:
+            found = (await r.json(content_type=None)).get("data") or []
+        for x in sorted((x for x in found if ok(norm((x.get("artist") or {}).get("name")), x.get("title"))),
+                        key=lambda x: -(x.get("nb_tracks") or 0))[:3]:       # the full album before a single of the same name
+            async with http.get(f"{DEEZER}/album/{x['id']}/tracks", params={"limit": "100"}) as r:
+                yield [(t.get("title"), t.get("duration")) for t in (await r.json(content_type=None)).get("data") or []]
+    except Exception as e:
+        log("song lengths (Deezer) failed:", repr(e))
+    try:
+        q = urllib.parse.urlencode({"term": f"{main_artist(artist)} {bare_album(album)}", "entity": "album", "limit": 10})
+        async with http.get(f"{ITUNES}/search?" + q) as r:
+            found = (await r.json(content_type=None)).get("results") or []
+        for x in [x for x in found if ok(norm(x.get("artistName")), x.get("collectionName"))][:3]:
+            apple = await itunes_album_record(http, x.get("collectionId"))
+            if apple:
+                yield [(t["title"], t["duration"]) for t in apple.tracks]
+    except Exception as e:
+        log("song lengths (Apple Music) failed:", repr(e))
+
+
+async def album_durations(app, rec):
+    """Discogs often leaves out how long the songs are, so the screen can't show the time or judge the
+    end of a song. Fill them in from the same album on Deezer or Apple Music, matched by song name."""
+    if all(t["duration"] for t in rec.tracks) or not rec.title:
+        return
+    filled, src = 0, None
+    async for songs in album_lengths(app["http"], rec.artist, rec.title, rec.various):
+        lengths = {norm(clean_title(n)): secs for n, secs in songs if n and secs}
+        for i, t in enumerate(rec.tracks):
+            secs = None if t["duration"] else lengths.get(norm(clean_title(t["title"])))
+            if secs:
+                t["duration"] = int(secs)
+                filled += 1
+                show_duration(app, rec, i)
+        if all(t["duration"] for t in rec.tracks):
+            break
+    if filled:
+        log(f"song lengths filled in for {filled} of {len(rec.tracks)} songs on {rec.title}")
+        save_record(rec)
 
 
 async def discogs_version(http, rec, title, artist, medium):
@@ -2551,7 +2619,7 @@ async def _turntable_inner(app, mic, shz):
                 log(f"Shazam says track {rec.tracks[on_record]['pos']}: moving there")
                 show_record(app, rec, rec.set_index(on_record))
             if not rec.tracks[on_record]["duration"]:
-                asyncio.create_task(fill_duration(app["http"], rec, on_record))
+                asyncio.create_task(fill_duration(app["http"], rec, on_record, app))
             if res.get("offset") is not None:
                 pos = res["offset"] + CFG["clip_seconds"]
                 set_progress(app, rec.track()["id"], pos, rec.tracks[rec.idx]["duration"], "exact", at=last_try)
