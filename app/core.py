@@ -3296,15 +3296,80 @@ async def api_records_load(request):
     rec = RecordSession(rel)
     if not rec.tracks:
         return web.json_response({"ok": False, "error": "Discogs doesn't list the songs on this one."})
+    old = app.get("record")
     app["record"] = rec
     app.pop("album_ask", None)
     app.pop("album_name", None)
     save_record(rec)
     log(f"record loaded: {rec.artist} - {rec.title} ({len(rec.tracks)} tracks)")
-    if app.get("listen_mode") == "active":          # already playing: start at track 1, Shazam will correct it
+    i = None
+    if body.get("keep") and old is not None and old.idx is not None:
+        i = rec.find(old.tracks[old.idx]["title"], old.track()["artist"])
+    if i is not None:                               # another pressing of the same record: same song, same place
+        rec.set_index(i)
+        rec.track_started, rec.exact_start = old.track_started, getattr(old, "exact_start", False)
+        show_record(app, rec, rec.track())
+        log(f"switched pressing, still on {rec.tracks[i]['pos']}")
+    elif app.get("listen_mode") == "active":        # already playing: start at track 1, Shazam will correct it
         show_record(app, rec, rec.set_index(0))
         app["force_check"] = True
     return web.json_response({"ok": True, "record": rec.summary()})
+
+
+async def api_records_pressings(request):
+    """Other pressings of the record being followed (the same Discogs master release): your own copy first,
+    then ones on the same format (vinyl, CD, tape), oldest first. With q: a catalog number or barcode to look for."""
+    app = request.app
+    rec = app.get("record")
+    if not rec or not discogs_ready():
+        return web.json_response({"pressings": []})
+    http, q = app["http"], (request.query.get("q") or "").strip()
+    fmt = {"vinyl": "Vinyl", "cd": "CD", "cassette": "Cassette"}.get(rec.medium or room_medium(app))
+    owned = owned_release_ids()
+    out = []
+    try:
+        if q:
+            digits = re.sub(r"\D", "", q)
+            params = {"type": "release", "per_page": 30}
+            params.update({"barcode": digits} if len(digits) >= 8 and len(digits) == len(q.replace(" ", "").replace("-", ""))
+                          else {"catno": q})
+            if not rec.various:
+                params["artist"] = main_artist(rec.artist)
+            res = (await discogs_get(http, "/database/search", params)).get("results", [])
+            if not res:                              # not a catalog number after all: a loose search
+                res = (await discogs_get(http, "/database/search", {"type": "release", "per_page": 30,
+                                                                     "q": f"{'' if rec.various else rec.artist} {bare_album(rec.title)} {q}".strip()})).get("results", [])
+            out = [search_row(r) for r in res]
+        else:
+            mid = (rec.rel or {}).get("master_id")
+            if mid:
+                d = await discogs_get(http, f"/masters/{int(mid)}/versions", {"per_page": 100})
+                for v in d.get("versions", []):
+                    out.append({"id": v.get("id"), "title": f"{rec.artist} - {v.get('title') or rec.title}",
+                                "year": (v.get("released") or "")[:4].strip("0") and (v.get("released") or "")[:4],
+                                "format": v.get("format") or "",
+                                "label": v.get("label") or "", "catno": v.get("catno") or "", "country": v.get("country"),
+                                "thumb": v.get("thumb"), "_major": " ".join(v.get("major_formats") or [])})
+            else:
+                params = {"type": "release", "release_title": bare_album(rec.title), "per_page": 40}
+                if not rec.various:
+                    params["artist"] = main_artist(rec.artist)
+                out = [search_row(r) | {"_major": ", ".join(r.get("format") or [])}
+                       for r in (await discogs_get(http, "/database/search", params)).get("results", [])]
+            def key(r):
+                y = str(r.get("year") or "")
+                y = int(y) if y.isdigit() and int(y) > 1900 else 9999     # Discogs says "0" when it doesn't know
+                return (0 if r["id"] == rec.id else 1, 0 if r["id"] in owned else 1,
+                        0 if fmt and fmt in (r.get("_major") or r.get("format") or "") else 1, y)
+            out.sort(key=key)
+    except Exception as e:
+        log("pressings lookup failed:", repr(e))
+        return web.json_response({"pressings": [], "error": "Couldn't reach Discogs."})
+    for r in out:
+        r.pop("_major", None)
+        r["current"] = r["id"] == rec.id
+        r["owned"] = r["id"] in owned
+    return web.json_response({"pressings": out[:40]})
 
 
 async def api_records_position(request):
@@ -5165,6 +5230,7 @@ def build_app(demo=False):
     app.router.add_post("/api/screen/idle", api_screen_idle)
     app.router.add_get("/api/records/search", api_records_search)
     app.router.add_get("/api/records/guess", api_records_guess)
+    app.router.add_get("/api/records/pressings", api_records_pressings)
     app.router.add_post("/api/records/load", api_records_load)
     app.router.add_post("/api/records/position", api_records_position)
     app.router.add_post("/api/records/clear", api_records_clear)

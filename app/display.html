@@ -257,6 +257,7 @@
     padding: .7em 1.1em; font: inherit; font-size: calc(var(--ts) * clamp(14px, 3vmin, 22px)); outline: none; min-width: 0; }
   #q:focus { border-color: var(--gold); }
   .result { display: flex; gap: 2vmin; align-items: center; padding: 1.2vmin; border-radius: 8px; cursor: pointer; }
+  #pressList .result.now { box-shadow: inset 0 0 0 2px var(--gold); border-radius: 10px; cursor: default; }
   .result:hover { background: rgba(255,255,255,.08); }
   .result img, .thumb { width: clamp(44px, 9vmin, 72px); height: clamp(44px, 9vmin, 72px); border-radius: 4px; object-fit: cover; background: #1a1a1d; flex: none; }
   .result b, .line b { display: block; font-size: calc(var(--ts) * clamp(13px, 2.7vmin, 20px)); font-weight: 600; }
@@ -681,7 +682,14 @@
   <div id="recLoaded" style="display:none">
     <div class="recHead"><img id="recCover" alt="">
       <div><h2 id="recTitle"></h2><div class="sub" id="recSub"></div>
-        <div class="row"><button class="pill" id="recChange">Search again</button><button class="pill" id="recDone">Done with this record</button></div></div></div>
+        <div class="row"><button class="pill" id="recPress">Wrong pressing?</button><button class="pill" id="recChange">Search again</button><button class="pill" id="recDone">Done with this record</button></div></div></div>
+    <div id="pressBox" style="display:none">
+      <h3 class="resHead">Pick your pressing</h3>
+      <p class="muted" style="margin:.2em 0 .8em">Liner Notes stays on the song that's playing. Type the catalog number from the spine or label, or the barcode, to find an exact one.</p>
+      <form class="row" id="pressForm"><input class="field" id="pressQ" placeholder="Catalog number or barcode" autocomplete="off" aria-label="Catalog number or barcode" style="flex:1">
+        <button class="pill" type="submit">Find</button></form>
+      <div id="pressList"></div>
+    </div>
     <p class="muted" id="recAuto" style="display:none">Liner Notes worked this out from the last two songs. Not the right record? Tap Search again.</p>
     <p class="muted">Tap the song that's playing if Liner Notes is on the wrong one, or to tell it which side you started on.</p>
     <div id="recTracks"></div>
@@ -1175,6 +1183,7 @@ function renderRecords() {
   $("scanBtn").style.display = "BarcodeDetector" in window ? "inline-block" : "none";
   if (!loaded) return;
   $("recAuto").style.display = record.auto ? "block" : "none";
+  if (record.id !== renderRecords.lastId) { renderRecords.lastId = record.id; $("pressBox").style.display = "none"; }
   $("recCover").src = record.cover || BLANK;
   $("recTitle").textContent = record.title;
   $("recSub").textContent = [record.artist, record.label, record.catno, oneYear(record.year)].filter(Boolean).join(" · ");
@@ -1242,6 +1251,34 @@ $("recTracks").addEventListener("click", async e => {
 });
 $("recChange").addEventListener("click", () => { recView = "pick"; renderRecords(); setTimeout(() => $("rq").focus(), 50); });
 $("nowRecList").addEventListener("click", () => { recView = "list"; renderRecords(); });
+// Wrong pressing: list the other pressings of this record and switch, staying on the same song
+async function loadPressings(q) {
+  $("pressBox").style.display = "block";
+  $("pressList").innerHTML = `<p class="muted">Looking on Discogs…</p>`;
+  let d = {};
+  try { d = await (await fetch("/api/records/pressings" + (q ? "?q=" + encodeURIComponent(q) : ""))).json(); } catch (e) {}
+  const ps = d.pressings || [];
+  $("pressList").innerHTML = ps.length ? ps.map(r => `
+      <div class="result${r.current ? " now" : ""}" data-press="${r.id}"><img src="${esc(r.thumb || BLANK)}" alt="" loading="lazy">
+        <div><b>${esc(r.title)}${r.current ? " · playing now" : r.owned ? " · yours" : ""}</b>
+        <span>${esc([oneYear(r.year), r.label, r.catno, r.format, r.country].filter(Boolean).join(" · "))}</span></div></div>`).join("")
+    : `<p class="muted">${esc(d.error || (q ? "Nothing found for that. Check the number, or try Search again." : "Discogs doesn't list other pressings of this one. Try a catalog number, or Search again."))}</p>`;
+}
+$("recPress").addEventListener("click", () => {
+  if ($("pressBox").style.display === "block") { $("pressBox").style.display = "none"; return; }
+  $("pressQ").value = ""; loadPressings("");
+});
+$("pressForm").addEventListener("submit", e => { e.preventDefault(); loadPressings($("pressQ").value.trim()); });
+$("pressList").addEventListener("click", async e => {
+  const row = e.target.closest("[data-press]"); if (!row || row.classList.contains("now")) return;
+  row.style.opacity = .5;
+  let d = {};
+  try { d = await (await fetch("/api/records/load", { method: "POST", headers: { "Content-Type": "application/json" },
+                                                     body: JSON.stringify({ id: row.dataset.press, keep: true }) })).json(); } catch (err) {}
+  if (!d.ok) { row.style.opacity = 1; toast(d.error || "Couldn't load that pressing."); return; }
+  record = d.record; $("pressBox").style.display = "none"; renderRecords(); poll();
+  toast("Switched to that pressing.");
+});
 $("recDone").addEventListener("click", async () => { await fetch("/api/records/clear", { method: "POST" }); record = null; recView = "pick"; renderRecords(); poll(); });
 $("recTokenSave").addEventListener("click", async () => {
   const d = await (await fetch("/api/config", { method: "POST", headers: { "Content-Type": "application/json" },
