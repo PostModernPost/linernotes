@@ -814,7 +814,9 @@ def record_progress(app, rec):
     """Record mode without a Shazam match: count from when the song started."""
     if rec and rec.idx is not None:
         t = rec.tracks[rec.idx]
-        set_progress(app, make_id(rec.track()["artist"], t["title"]), 0, t["duration"], "estimate", at=rec.track_started)
+        unknown = getattr(rec, "time_unknown", False)       # picked mid-song: only Shazam can say where we are
+        set_progress(app, make_id(rec.track()["artist"], t["title"]), None if unknown else 0, t["duration"], "estimate",
+                     at=rec.track_started)
 
 
 # ---------------------------------------------------------------- more song details (Deezer) and tempo
@@ -1666,6 +1668,7 @@ class RecordSession:
         self.side_done = False
         self.track_started = time.time()
         self.exact_start = False       # True once Shazam has said exactly where in the song we are
+        self.time_unknown = False      # True when the record was picked mid-song and Shazam hasn't placed it yet
         self.last_active = time.time()
         return self.track()
 
@@ -1698,6 +1701,8 @@ class RecordSession:
             return None
         dur = self.tracks[self.idx]["duration"] or 0
         played = now - self.track_started
+        if getattr(self, "time_unknown", False):
+            return "maybe"
         if dur:
             if played < max(30, dur - 40):
                 return None
@@ -1709,6 +1714,8 @@ class RecordSession:
         if self.idx is None or self.last_on_side(self.idx):
             return False
         dur = self.tracks[self.idx]["duration"]
+        if getattr(self, "time_unknown", False):
+            return False
         return bool(dur) and now - self.track_started > dur + (3 if getattr(self, "exact_start", False) else 10)
 
     def advance(self):
@@ -2666,7 +2673,7 @@ async def _turntable_inner(app, mic, shz):
             if res.get("offset") is not None:
                 pos = res["offset"] + CFG["clip_seconds"]
                 set_progress(app, rec.track()["id"], pos, rec.tracks[rec.idx]["duration"], "exact", at=last_try)
-                rec.track_started, rec.exact_start = last_try - pos, True
+                rec.track_started, rec.exact_start, rec.time_unknown = last_try - pos, True, False
             continue
         if res and res.get("title"):
             misses = 0
@@ -3423,19 +3430,26 @@ async def api_records_load(request):
     if i is not None:                               # another pressing of the same record: same song, same place
         rec.set_index(i)
         rec.track_started, rec.exact_start = old.track_started, getattr(old, "exact_start", False)
+        rec.time_unknown = not rec.exact_start or getattr(old, "time_unknown", False)
         show_record(app, rec, rec.track())
         log(f"switched pressing, still on {rec.tracks[i]['pos']}")
     elif body.get("keep") and cur and cur.get("status") == "playing" and \
             (i := rec.find(cur.get("title"), cur.get("artist"))) is not None:
         rec.set_index(i)                            # the album for the song playing now: start the record there
         p = progress_now(app)
-        if p and p.get("pos") is not None:
-            rec.track_started, rec.exact_start = time.time() - p["pos"], p.get("kind") == "exact"
+        if p and p.get("pos") is not None and p.get("kind") == "exact":
+            rec.track_started, rec.exact_start = time.time() - p["pos"], True
+        else:
+            rec.time_unknown = True
         show_record(app, rec, rec.track())
         log(f"album changed, on {rec.tracks[i]['pos']}")
     elif app.get("listen_mode") == "active":        # already playing: start at track 1, Shazam will correct it
-        show_record(app, rec, rec.set_index(0))
-        app["force_check"] = True
+        rec.set_index(0)
+        rec.time_unknown = True
+        show_record(app, rec, rec.track())
+    if app.get("listen_mode") == "active" and not rec.exact_start:
+        app["force_check"] = True                   # picked mid-song: ask Shazam where we are
+        log("asking Shazam where in the song we are")
     return web.json_response({"ok": True, "record": rec.summary()})
 
 
