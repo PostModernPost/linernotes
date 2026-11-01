@@ -2599,7 +2599,7 @@ async def _turntable_inner(app, mic, shz):
         on_record = rec.find(res["title"], res["artist"]) if (rec and res and res.get("title")) else None
         cur = app["state"].track
         if res and res.get("title") and not gap and on_record is None and cur and cur.get("status") == "playing" \
-                and cur.get("source") in ("record", "turntable") and cur.get("artist") and not (rec and rec.unconfirmed):
+                and cur.get("source") in ("record", "turntable") and cur.get("artist") and not (rec and rec.unconfirmed and now - rec.track_started < 60):
             # Mid-song, no gap, and Shazam names a different artist: often a bad match on a song it doesn't
             # know. Believe it only when the next check names the same song.
             a, b = norm(main_artist(res["artist"])), norm(main_artist(cur["artist"]))
@@ -2612,14 +2612,18 @@ async def _turntable_inner(app, mic, shz):
         app.pop("suspect", None)
         if rec and not rec.auto and res and res.get("title") and on_record is None and rec.idx is not None:
             # A record you loaded yourself (a live album, a compilation): Shazam often names the studio
-            # version of a song on it, or a song that just sounds alike. Stay on the record unless it
-            # names two different songs that aren't on it in a row (then a different record is playing).
-            off = getattr(rec, "off_record", None)
-            if not off or norm(off) == norm(res["title"]):
-                rec.off_record = res["title"]
-                log(f"Shazam says '{res['title']}', which isn't on {rec.title}: staying on the record")
+            # version of a song on it, or a song that just sounds alike, and on a record it doesn't know it
+            # names random songs. Stay on the record unless two songs that aren't on it agree with each
+            # other: two in a row by the same artist (then a different record really is playing).
+            offs = getattr(rec, "off_record", None) or []
+            a = norm(main_artist(res["artist"]))
+            own = rec.various is False and a and (a in norm(rec.artist) or norm(main_artist(rec.artist)) in a)
+            if own or not a or not offs or norm(main_artist(offs[-1]["artist"])) != a:
+                # the band's own song from another release, or a match that agrees with nothing before it
+                rec.off_record = (offs + [{"title": res["title"], "artist": res["artist"]}])[-4:]
+                log(f"Shazam says '{res['title']}' by {res['artist']}, which isn't on {rec.title}: staying on the record")
                 continue
-            log(f"Shazam named two songs that aren't on {rec.title}: a different record is playing")
+            log(f"Shazam named two songs by {res['artist']} that aren't on {rec.title}: a different record is playing")
             app["record"] = rec = None
             save_record(None)
         elif rec and on_record is not None:
