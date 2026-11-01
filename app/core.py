@@ -2597,6 +2597,10 @@ async def _turntable_inner(app, mic, shz):
             app["listen_now_done"] = time.time()
 
         on_record = rec.find(res["title"], res["artist"]) if (rec and res and res.get("title")) else None
+        if res and res.get("title") and needle_drop and now - active_since < 90 and (res.get("offset") is None or res["offset"] < 60):
+            app["side_opener"] = {"title": res["title"], "artist": res["artist"], "at": now}   # the first song on a side
+        if res and res.get("title"):
+            needle_drop = False
         cur = app["state"].track
         if res and res.get("title") and not gap and on_record is None and cur and cur.get("status") == "playing" \
                 and cur.get("source") in ("record", "turntable") and cur.get("artist") and not (rec and rec.unconfirmed and now - rec.track_started < 60):
@@ -3421,6 +3425,9 @@ async def api_records_load(request):
     rec = RecordSession(rel)
     if not rec.tracks:
         return web.json_response({"ok": False, "error": "Discogs doesn't list the songs on this one."})
+    opener = app.get("side_opener")
+    if body.get("keep") and not body.get("exact") and opener and time.time() - opener["at"] < 40 * 60:
+        rec = await pressing_with_opener(app["http"], rec, opener) or rec
     old = app.get("record")
     app["record"] = rec
     app.pop("album_ask", None)
@@ -3455,6 +3462,37 @@ async def api_records_load(request):
         app["force_check"] = True                   # picked mid-song: ask Shazam where we are
         log("asking Shazam where in the song we are")
     return web.json_response({"ok": True, "record": rec.summary()})
+
+
+def opens_side(rec, i):
+    return i is not None and (i == 0 or rec.tracks[i - 1]["side"] != rec.tracks[i]["side"])
+
+
+async def pressing_with_opener(http, rec, opener):
+    """You put the needle down on a song, so it opens a side. When it's in the middle of a side on the
+    release you picked (pressings in other countries often have their own order), find a pressing of the
+    same album where it opens one: the album's main release first, then others on the same format."""
+    i = rec.find(opener["title"], opener["artist"])
+    mid = (rec.rel or {}).get("master_id")
+    if i is None or opens_side(rec, i) or not mid:
+        return None
+    try:
+        m = await discogs_get(http, f"/masters/{int(mid)}")
+        ids = [m.get("main_release")] if m.get("main_release") and m.get("main_release") != rec.id else []
+        fmt = {"vinyl": "Vinyl", "cassette": "Cassette", "cd": "CD"}.get(rec.medium, "Vinyl")
+        v = await discogs_get(http, f"/masters/{int(mid)}/versions", {"per_page": 100})
+        ids += [x["id"] for x in v.get("versions") or []
+                if x.get("id") and x["id"] != rec.id and x["id"] not in ids and fmt in (x.get("major_formats") or [])]
+        for rid in ids[:8]:
+            other = RecordSession(await discogs_get(http, f"/releases/{rid}"))
+            j = other.find(opener["title"], opener["artist"])
+            if other.tracks and opens_side(other, j):
+                log(f"'{opener['title']}' is {rec.tracks[i]['pos']} on the pressing picked, but the side started with it: "
+                    f"using the {other.rel.get('country') or ''} {other.year or ''} pressing, where it's {other.tracks[j]['pos']}")
+                return other
+    except Exception as e:
+        log("pressing lookup failed:", repr(e))
+    return None
 
 
 async def api_records_pressings(request):

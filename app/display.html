@@ -1288,7 +1288,7 @@ $("pressList").addEventListener("click", async e => {
   row.style.opacity = .5;
   let d = {};
   try { d = await (await fetch("/api/records/load", { method: "POST", headers: { "Content-Type": "application/json" },
-                                                     body: JSON.stringify({ id: row.dataset.press, keep: true }) })).json(); } catch (err) {}
+                                                     body: JSON.stringify({ id: row.dataset.press, keep: true, exact: true }) })).json(); } catch (err) {}
   if (!d.ok) { row.style.opacity = 1; toast(d.error || "Couldn't load that pressing."); return; }
   record = d.record; $("pressBox").style.display = "none"; renderRecords(); poll();
   closePanel("records"); toast("Switched to that pressing.");
