@@ -1454,20 +1454,13 @@ function showListening(l) {
   $("listenBtn2").style.display = "none";          // Listen now lives on the couldn't-identify screen only
   listenNowProgress(l.now_state);
 }
-let lastListenActive = false, doneKey = null, doneSince = 0, doneTimer = null;
-const DONE_SHOW_MS = 60000;                     // "flip to side B" / "That's the end of…" goes away after a minute
+let lastListenActive = false;
 function updateIdleText() {
-  // Nothing on screen yet but the mic hears music: say so. A finished side: remind to flip.
+  // Nothing on screen yet but the mic hears music: say so.
   const active = lastListenActive;
   $("idle").classList.toggle("listening", !current && active);
   let msg = "Nothing playing";
   if (!current && active) msg = "Hearing music, figuring out what it is…";
-  else if (record && record.side_done) {
-    const key = `${record.title}|${record.done_side}`;
-    if (key !== doneKey) { doneKey = key; doneSince = Date.now(); clearTimeout(doneTimer); doneTimer = setTimeout(updateIdleText, DONE_SHOW_MS + 500); }
-    if (Date.now() - doneSince < DONE_SHOW_MS)
-      msg = record.next_side ? `Side ${record.done_side} is done · flip to side ${record.next_side}` : `That's the end of ${record.title}`;
-  } else doneKey = null;
   $("idleText").textContent = msg;
   $("idleStatus").textContent = msg;
   $("idleStatus").classList.toggle("on", msg !== "Nothing playing");
