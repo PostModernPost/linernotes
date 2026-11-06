@@ -992,6 +992,14 @@ async def enrich_track(app, t):
                            if not merged.get(k) and dz.get(k)})
             if not t.get("art") and not fields.get("art") and dz.get("art") and same_album(dz):
                 fields["art"] = dz["art"]
+        if not t.get("art") and not fields.get("art") and (it.get("art") or dz.get("art")):
+            fields["art"] = it.get("art") or dz.get("art")     # no cover for this release: the album the song is on
+        album = merged.get("album") or fields.get("album")
+        if not t.get("original") and album and album_kind(album) == "single":
+            # shown as a single: say which album it's on too, if it's on one
+            st = studio_album(await itunes_song_albums(http, t["artist"], t["title"]))
+            if st and norm(bare_album(st["album"])) != norm(bare_album(album)):
+                fields["original"] = {"album": st["album"], "year": st["year"] or None, "art": st.get("art"), "also": True}
         if need_label:
             better = await musicbrainz_label(http, t["artist"], t["title"], merged.get("album")) or dz.get("label")
             if better or not t.get("label"):

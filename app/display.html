@@ -1077,12 +1077,13 @@ function detailsText(t, all) {
 // A song on a compilation, with its original album known: show the compilation, the original album, or both
 function origText(o) {                  // "Originally on <album> (year)", or "First out as a single (year)"
   const y = o.year ? ` (${esc(o.year)})` : "", m = (o.album || "").match(/^(.*?)\s+-\s+(single|ep)$/i);
+  if (o.also) return `Also on <b>${esc(o.album)}</b>${y}`;      // a single: the album it's on
   if (m && m[2].toLowerCase() === "single") return `First out as a single${y}`;
   return `Originally on <b>${esc(m ? m[1] + " EP" : o.album)}</b>${y}`;
 }
 function compView(t) {
   const o = t && t.original;
-  if (!o || !o.album || settings.compMode !== "original") return t;
+  if (!o || !o.album || o.also || settings.compMode !== "original") return t;
   return { ...t, album: o.album, year: o.year || t.year, label: null, art: o.art || t.art };
 }
 function render(t, keepArt) {
@@ -1116,7 +1117,7 @@ function render(t, keepArt) {
   $("title").textContent = t.title || "";
   $("artist").textContent = t.artist || "";
   $("album").textContent = v.album || "";
-  const o = t.original, both = settings.compMode === "both" && o && o.album;
+  const o = t.original, both = o && o.album && (settings.compMode === "both" || (o.also && settings.compMode === "original"));
   $("origLine").innerHTML = both ? origText(o) : "";
   $("origLine").style.display = both && !unknown ? "block" : "none";
   const det = detailsText(v);
