@@ -81,6 +81,7 @@ CFG = {
     "hold_seconds": 60,
     "phone_off_minutes": 0,        # USB phone screen turns off after this long with nothing playing (0 = never)
     "listening_paused": False,     # the listener turned listening off (main screen or Settings) until turned back on
+    "album_mode": False,           # a whole album is playing: a first song that doesn't open the band's album may be on a compilation
     "follow_album": True,          # after a song is recognized on physical media, follow its album's tracklist
     "stylus_since": None,          # when the current stylus went on (unix time); None = since the first record in Liner Notes
     "stylus_start_hours": 0,       # hours the stylus already had when tracking started
@@ -1266,6 +1267,31 @@ async def compilation_guesses(http, songs, medium=None):
     return [search_row(r) for _, r in checked]
 
 
+async def opener_compilations(http, song, medium=None):
+    """Compilations on Discogs where this song opens a side (the needle went down on it), on this medium first."""
+    res = await discogs_get(http, "/database/search", {"type": "release", "format": "Compilation", "per_page": 50,
+                                                       "q": f"{lead_artist(song['artist'])} {clean_title(song['title'])}"})
+    fmt, owned = medium_format(medium), owned_release_ids()
+    rows = [r for r in res.get("results", [])
+            if not {"Unofficial Release", "DVD", "CD-ROM", "File"} & set(r.get("format") or [])]
+    rows.sort(key=lambda r: (0 if fmt in (r.get("format") or []) else 1, 0 if r["id"] in owned else 1))
+    out, seen = [], set()
+    for r in rows:
+        if norm(r.get("title")) in seen:          # one pressing of each
+            continue
+        seen.add(norm(r.get("title")))
+        try:
+            rec = RecordSession(await discogs_get(http, f"/releases/{r['id']}"))
+        except Exception:
+            continue
+        i = rec.find(song["title"], song["artist"])
+        if opens_side(rec, i):
+            out.append({**search_row(r), "pos": rec.tracks[i]["pos"]})
+        if len(out) >= 3 or len(seen) >= 8:
+            break
+    return out
+
+
 async def song_album_guesses(http, artist, title, medium=None):
     """The artist's albums on Discogs with this song on them, oldest first, one pressing each: the album
     it's from, then best-ofs and anything else it's on. Singles, 12-inch mixes and videos are left out."""
@@ -2316,6 +2342,8 @@ async def _turntable_inner(app, mic, shz):
         except Exception as e:
             log("album lookup failed:", repr(e))
             return
+        if CFG.get("album_mode") and discogs_ready() and time.time() > app.get("album_ask_off_until", 0):
+            asyncio.create_task(ask_opener_compilations(song, found, idx))
         if not found or app.get("record") or app.get("album_name"):
             return
         found.auto = True
@@ -2336,6 +2364,30 @@ async def _turntable_inner(app, mic, shz):
         if pos is not None:            # keep Shazam's exact place in the song, so the switch to the next one lands on time
             found.track_started, found.exact_start = time.time() - pos, True
             set_progress(app, found.track()["id"], pos, found.tracks[idx]["duration"], "exact")
+
+    async def ask_opener_compilations(song, found, idx):
+        """Album mode: the needle went down on this song, so it opens a side. When it doesn't open a side
+        of the band's own album (or it's only out as a single), look for compilations that start with it
+        and ask if one of them is playing."""
+        op = app.get("side_opener") or {}
+        if norm(op.get("title")) != norm(song["title"]) or time.time() - op.get("at", 0) > 120:
+            return                                   # not where the needle went down: it doesn't open a side
+        if found and opens_side(found, idx) and album_kind(found.title, len(found.tracks)) != "single":
+            return                                   # it starts a side of the band's album: that's the one
+        try:
+            choices = await opener_compilations(app["http"], song, room_medium(app))
+        except Exception as e:
+            log("compilation lookup failed:", repr(e))
+            return
+        if not choices or app.get("album_name"):
+            log(f"album mode: no compilation starts with '{song['title']}'")
+            return
+        cur = app.get("record")
+        if cur and not cur.auto:
+            return                                   # you already picked the record
+        app["album_ask"] = {"kind": "opener", "songs": [{"title": song["title"], "artist": song["artist"]}],
+                            "since": time.time(), "choices": choices, "discogs": True}
+        log(f"album mode: '{song['title']}' opens a side on {', '.join(c['title'] for c in choices)}: asking")
 
     async def work_out_record(first, second):
         """Two songs in a row that aren't on the record Liner Notes was following (or with none yet):
@@ -3646,6 +3698,8 @@ async def api_config(request):
             pass
     if "follow_album" in body:
         cfg["follow_album"] = CFG["follow_album"] = bool(body.get("follow_album"))
+    if "album_mode" in body:
+        cfg["album_mode"] = CFG["album_mode"] = bool(body.get("album_mode"))
     if body.get("mic_sensitivity") in SENSITIVITY:
         cfg["mic_sensitivity"] = CFG["mic_sensitivity"] = body["mic_sensitivity"]
     if "room_medium" in body:
@@ -5423,6 +5477,7 @@ async def api_now(request):
                               "saved": bool(st.track and st.track.get("id") in st.db.saved_ids),
                               "media_default": CFG.get("room_medium"),
                               "follow_album": CFG.get("follow_album", True),
+                              "album_mode": CFG.get("album_mode", False),
                               "pc_media": CFG.get("pc_media", "music"),
                               "ask_medium": bool(st.track and st.track.get("source") in ROOM_SOURCES and st.track.get("status") == "playing"
                                                  and not st.track.get("medium") and not room_medium(request.app)),

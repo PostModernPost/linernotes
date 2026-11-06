@@ -876,6 +876,8 @@
       <button class="pill" data-rm="cassette">Cassette</button><button class="pill" data-rm="radio">Radio</button><button class="pill" data-rm="other">Other</button></div></div>
   <div class="setting" id="followAlbumRow">
     <div>Follow the album<small>When a song on a record, CD or tape is recognized, Liner Notes assumes the album is playing and shows the next songs in order, switching when each one's length is up, even if Shazam can't match them. Turn off for mixtapes and compilations, or load the compilation with Manual search.</small></div><div class="switch"></div></div>
+  <div class="setting" id="albumModeRow">
+    <div>Album mode<small>Assume a whole album is on, not a single. When the song you put the needle down on doesn't start a side of the band's own album, Liner Notes looks for compilations that start with it and asks if you're playing one of them.</small></div><div class="switch"></div></div>
   <h3 class="not-solo" style="margin-top:3vmin;margin-bottom:0">On this PC</h3>
   <div class="setting not-solo" id="pcMediaRow" style="cursor:default">
     <div>Apps on this PC<small>What Liner Notes shows from this PC. Music apps only: Spotify, Apple Music, Tidal and other music players, plus music sites in a browser (Spotify, YouTube Music, Bandcamp). Everything: anything Windows says is playing, YouTube and Reddit videos included.</small></div>
@@ -1159,6 +1161,7 @@ async function poll() {
     if (!saveBusy) setHearts(!!d.saved);
     mediaDefault = d.media_default || "";
     $("followAlbumRow").classList.toggle("on", d.follow_album !== false);
+    $("albumModeRow").classList.toggle("on", !!d.album_mode);
     document.querySelectorAll("#pcMediaRow [data-pm]").forEach(b => b.classList.toggle("on", b.dataset.pm === (d.pc_media || "music")));
     document.querySelectorAll("#mediaRow [data-rm]").forEach(b => b.classList.toggle("on", b.dataset.rm === mediaDefault));
     if (!mediumPicking) $("mediumAsk").classList.toggle("on", !!d.ask_medium && !mediumBusy);
@@ -2399,6 +2402,11 @@ $("pcMediaRow").addEventListener("click", async e => {
   document.querySelectorAll("#pcMediaRow [data-pm]").forEach(x => x.classList.toggle("on", x === b));
   try { await fetch("/api/config", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ pc_media: b.dataset.pm }) }); } catch (err) {}
 });
+$("albumModeRow").addEventListener("click", async () => {
+  const on = !$("albumModeRow").classList.contains("on");
+  $("albumModeRow").classList.toggle("on", on);
+  try { await fetch("/api/config", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ album_mode: on }) }); } catch (e) {}
+});
 $("followAlbumRow").addEventListener("click", async () => {
   const on = !$("followAlbumRow").classList.contains("on");
   $("followAlbumRow").classList.toggle("on", on);
@@ -2522,7 +2530,9 @@ function showAlbumAsk(ask, named) {
   else {
     if (aaFor !== ask.since) { aaFor = ask.since; aaStep = "comp"; el.classList.remove("naming"); }
     el.classList.add("on");
-    $("aaSongs").textContent = ask.songs.map(x => `${x.title} (${x.artist})`).join(" · ");
+    $("aaSongs").textContent = ask.kind === "opener" && aaStep === "comp"
+      ? `${ask.songs[0].title} starts a side on ${ask.choices.length > 1 ? "these" : "this"}.`
+      : ask.songs.map(x => `${x.title} (${x.artist})`).join(" · ");
     drawAlbumAsk();
   }
   $("oaStop").style.display = named ? "inline-block" : "none";
@@ -2531,9 +2541,13 @@ function showAlbumAsk(ask, named) {
 }
 function drawAlbumAsk() {
   const album = current && current.album;
-  const q = aaStep === "album" ? `Is it ${album}?` : aaStep === "picking" ? "Pick it in the search, or name it yourself." : "Is this a compilation?";
-  const btns = aaStep === "picking" ? [["name", "Name it"]] : [["yes", "Yes"], ["no", "No"]];
-  const html = btns.map(([a, t]) => `<button class="pill" data-aa="${a}">${esc(t)}</button>`).join("");
+  const opener = albumAsk && albumAsk.kind === "opener" && aaStep === "comp";
+  const q = opener ? (albumAsk.choices.length > 1 ? "Are you playing one of these?" : `Are you playing ${albumAsk.choices[0].title}?`)
+    : aaStep === "album" ? `Is it ${album}?` : aaStep === "picking" ? "Pick it in the search, or name it yourself." : "Is this a compilation?";
+  const btns = opener ? [...(albumAsk.choices.length > 1 ? albumAsk.choices.map(c => ["pick", c.title.replace(/^Various\s*-\s*/, ""), c.id])
+                                                           : [["pick", "Yes", albumAsk.choices[0].id]]), ["no", "No"]]
+    : aaStep === "picking" ? [["name", "Name it"]] : [["yes", "Yes"], ["no", "No"]];
+  const html = btns.map(([a, t, id]) => `<button class="pill" data-aa="${a}"${id ? ` data-id="${esc(String(id))}"` : ""}>${esc(t)}</button>`).join("");
   if ($("aaQ").textContent !== q) $("aaQ").textContent = q;
   if ($("aaBtns").innerHTML !== html) $("aaBtns").innerHTML = html;
   $("aaSongs").style.display = aaStep === "album" ? "none" : "";
@@ -2562,6 +2576,8 @@ $("albumAsk").addEventListener("click", e => {
   if (e.target.closest("#aaX")) { albumAskDone(); return; }
   const b = e.target.closest("[data-aa]"); if (!b) return;
   const a = b.dataset.aa, artist = (current && current.artist) || (albumAsk && albumAsk.songs.slice(-1)[0].artist) || "";
+  if (a === "pick") { pickOpener(b); return; }
+  if (albumAsk && albumAsk.kind === "opener" && aaStep === "comp" && a === "no") { albumAskDone(); return; }
   if (aaStep === "comp" && a === "yes") { aaStep = "picking"; drawAlbumAsk(); if (discogsReady) openGuesses("compilation"); else openSearch(); }
   else if (aaStep === "comp" && a === "no") {
     if (current && current.album) { aaStep = "album"; drawAlbumAsk(); }
@@ -2571,6 +2587,15 @@ $("albumAsk").addEventListener("click", e => {
   else if (aaStep === "album" && a === "no") { albumAskDone(); openGuesses("studio", artist, current && current.title); }
   else if (a === "name") { $("albumAsk").classList.add("naming"); setTimeout(() => $("aaTitle").focus(), 30); }
 });
+async function pickOpener(b) {          // album mode: one of the compilations that start with the song
+  b.style.opacity = .5;
+  let d = {};
+  try { d = await (await fetch("/api/records/load", { method: "POST", headers: { "Content-Type": "application/json" },
+                                                     body: JSON.stringify({ id: b.dataset.id, keep: true, exact: true }) })).json(); } catch (err) {}
+  if (!d.ok) { b.style.opacity = 1; toast(d.error || "Couldn't load that record."); return; }
+  record = d.record; $("albumAsk").classList.remove("on", "naming"); albumAsk = null; renderRecords(); poll();
+  toast(`Following ${d.record.title}.`);
+}
 async function nameAlbum(title, artist) {
   try {
     const r = await fetch("/api/album/name", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ title, artist }) });
