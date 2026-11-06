@@ -25,9 +25,9 @@
     gap: 4vmin; padding: 4vmin; cursor: pointer; }
   #side { min-width: 0; display: flex; flex-direction: column; max-height: 100%; }
   #side > p, #side > span, #side > button { flex: none; }
-  body.lyrics-show #side { padding-top: 6vmin; }
+  body.lyrics-show #side { padding-top: max(6vmin, var(--tbh)); }
   @media (min-aspect-ratio: 7/5) {
-    #stage { flex-direction: row; } #side { text-align: left; max-width: 50vw; } #art { height: 92vh; } }
+    #stage { flex-direction: row; } #side { text-align: left; max-width: 50vw; padding-block: var(--tbh); } #art { height: 92vh; } }
   @media (max-aspect-ratio: 7/5) {
     #stage { flex-direction: column; } #side { text-align: center; align-items: center; } #art { height: min(66vh, 92vw); } }
   /* square-ish windows: a smaller cover so the song details below it still fit */
@@ -159,11 +159,14 @@
   #micSel { font-size: .9em; padding: .45em .9em; max-width: 22em; color-scheme: dark; cursor: pointer; }
   #micSel option { background: #1d1d20; color: var(--fg); }
   #stylusBox input.field { width: 10em; color-scheme: dark; font-size: 1em; padding: .45em .9em; }
+  /* --tbh: the strip the toolbar takes at the top, kept clear above and below so the cover never sits under the buttons */
+  :root { --tbh: calc(max(1.5vmin, env(safe-area-inset-top)) + clamp(34px, 7vmin, 48px) + 8px); }
+  @media (pointer: coarse) { :root { --tbh: calc(max(1.5vmin, env(safe-area-inset-top)) + 52px); } }
   #jp, #slides { position: absolute; inset: 0; transition: opacity 2.5s ease; }
-  #jp { display: flex; align-items: center; justify-content: center; gap: 6vmin; padding: 6vmin 7vmin; box-sizing: border-box; }
+  #jp { display: flex; align-items: center; justify-content: center; gap: 6vmin; padding: max(6vmin, var(--tbh)) 7vmin; box-sizing: border-box; }
   #jp.off, #slides.off { opacity: 0; pointer-events: none; }
   #jpArt.record { border-radius: 50%; }
-  #jpArt { height: min(74vh, 46vw); aspect-ratio: 1; object-fit: cover; border-radius: 6px; box-shadow: 0 20px 60px rgba(0,0,0,.6); flex: none; background: #1a1a1d; }
+  #jpArt { height: min(74vh, 46vw, 100vh - 2 * var(--tbh)); aspect-ratio: 1; object-fit: cover; border-radius: 6px; box-shadow: 0 20px 60px rgba(0,0,0,.6); flex: none; background: #1a1a1d; }
   #jpSide { min-width: 0; max-width: 46vw; color: var(--fg); }
   #jpKicker { font-size: calc(var(--ts) * clamp(18px, 4.4vmin, 44px)); font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
     color: var(--gold); margin: 0 0 .35em; line-height: 1; }
@@ -184,8 +187,9 @@
   #slides .bgl { position: absolute; inset: -8%; background-size: cover; background-position: center; filter: blur(60px) brightness(.4) saturate(1.2);
     transition: opacity 3s ease; }
   #slides .sl { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2.4vmin;
+    padding: var(--tbh) 0; box-sizing: border-box;
     transition: opacity 3s ease; }
-  #slides .sl img { height: min(72vh, 80vw); aspect-ratio: 1; object-fit: cover; border-radius: 6px; box-shadow: 0 24px 70px rgba(0,0,0,.65);
+  #slides .sl img { height: min(72vh, 80vw, 100vh - 2 * var(--tbh) - 9vmin); aspect-ratio: 1; object-fit: cover; border-radius: 6px; box-shadow: 0 24px 70px rgba(0,0,0,.65);
     animation: drift 16s ease-in-out both; }
   #slides .sl .cap { color: var(--dim); font-size: calc(var(--ts) * clamp(11px, 2.2vmin, 18px)); text-align: center; max-width: 80vw; }
   #slides .sl .cap b { color: var(--fg); font-weight: 600; }
