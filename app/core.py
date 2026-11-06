@@ -1061,10 +1061,13 @@ async def find_original(app, rec, i):
     t = rec.tracks[i]
     t["original"] = None                 # looked up once
     try:
-        st = studio_album(await itunes_song_albums(app["http"], t["artist"], t["title"]))
+        cands = await itunes_song_albums(app["http"], t["artist"], t["title"])
     except Exception as e:
         log("original album lookup failed:", repr(e))
         return
+    # the album it's from, or (a new band's song on a compilation is often only out as one) the single or EP
+    first = [c for c in cands if c["kind"] in ("single", "ep") and norm(c["album"]) != norm(rec.title)]
+    st = studio_album(cands) or (min(first, key=lambda c: c["year"] or "9999") if first else None)
     if not st or norm(st["album"]) == norm(rec.title):
         return
     t["original"] = {"album": st["album"], "year": st["year"] or None, "art": st.get("art")}

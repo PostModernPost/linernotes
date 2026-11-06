@@ -844,7 +844,7 @@
     <div>Fullscreen<small id="fsHint">Hides the browser's bars until you leave the page.</small></div><div class="switch"></div></div>
   <h3 style="margin-top:3vmin;margin-bottom:0">On the main screen</h3>
   <div class="setting" id="compRow" style="cursor:default">
-    <div>On compilations, show<small>For a song on a compilation: the compilation you're playing, the album the song first came out on (its cover and year), or the compilation with a line saying where the song is from.</small></div>
+    <div>On compilations, show<small>For a song on a compilation: the compilation you're playing, the album the song first came out on (its cover and year), or the compilation with a line under it naming the album the song first came out on.</small></div>
     <div class="sizes">
       <button class="pill" data-cm="compilation">The compilation</button><button class="pill" data-cm="original">The original album</button>
       <button class="pill" data-cm="both">Both</button></div></div>
@@ -1025,7 +1025,7 @@ function esc(s) { return String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","
 
 // ---------------------------------------------------------------- settings (per screen)
 const SETTINGS_DEFAULT = { lyricsBeside: false, textSize: "1.6", showYear: true, showLabel: true, showGenre: true,
-                           showProgress: true, showBpm: false, sideEndPulse: true, compMode: "compilation", idleMode: "both", idleOff: 0 };
+                           showProgress: true, showBpm: false, sideEndPulse: true, compMode: "both", idleMode: "both", idleOff: 0 };
 let settings = { ...SETTINGS_DEFAULT };
 try { Object.assign(settings, JSON.parse(localStorage.getItem("coverart-settings") || "{}")); } catch (e) {}
 if (settings.showDetails === false) {          // older single switch
@@ -1075,6 +1075,11 @@ function detailsText(t, all) {
 }
 
 // A song on a compilation, with its original album known: show the compilation, the original album, or both
+function origText(o) {                  // "Originally on <album> (year)", or "First out as a single (year)"
+  const y = o.year ? ` (${esc(o.year)})` : "", m = (o.album || "").match(/^(.*?)\s+-\s+(single|ep)$/i);
+  if (m && m[2].toLowerCase() === "single") return `First out as a single${y}`;
+  return `Originally on <b>${esc(m ? m[1] + " EP" : o.album)}</b>${y}`;
+}
 function compView(t) {
   const o = t && t.original;
   if (!o || !o.album || settings.compMode !== "original") return t;
@@ -1112,7 +1117,7 @@ function render(t, keepArt) {
   $("artist").textContent = t.artist || "";
   $("album").textContent = v.album || "";
   const o = t.original, both = settings.compMode === "both" && o && o.album;
-  $("origLine").innerHTML = both ? `Originally on <b>${esc(o.album)}</b>${o.year ? ` (${esc(o.year)})` : ""}` : "";
+  $("origLine").innerHTML = both ? origText(o) : "";
   $("origLine").style.display = both && !unknown ? "block" : "none";
   const det = detailsText(v);
   $("details").textContent = det;
@@ -1830,7 +1835,7 @@ async function openInfo(t) {
   $("i-details").textContent = [detailsText(t, true), t.duration_ms ? fmtDur(Math.round(t.duration_ms / 1000)) : ""].filter(Boolean).join(" · ");
   // a song on a compilation: the album it first came out on
   const o = t.original;
-  $("i-orig").innerHTML = o && o.album ? `Originally on <b>${esc(o.album)}</b>${o.year ? ` (${esc(o.year)})` : ""}` : "";
+  $("i-orig").innerHTML = o && o.album ? origText(o) : "";
   $("links").innerHTML = (t.links || []).map(l =>
     `<a class="pill" href="${esc(l.url)}" target="_blank" rel="noopener">${esc(l.name)}</a>`).join("");
   $("donate").style.display = "none";              // the coffee button sits at the top of the page now
