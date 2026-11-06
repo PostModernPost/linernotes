@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Phone setup · Liner Notes</title>
-<meta name="description" content="Use an old Android phone or an iPhone as the Liner Notes screen next to your turntable.">
+<meta name="description" content="Set up Liner Notes on an Android phone, on its own or connected to your PC, or use an iPhone as the screen.">
 <link rel="icon" href="/img/icon.svg" type="image/svg+xml">
 <link rel="preload" href="/fonts/archivo.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
@@ -18,17 +18,31 @@
 
 <main class="guide">
   <h1>Use an old phone as the screen.</h1>
-  <p class="lede">Liner Notes runs on your PC. A phone shows the same screen, so it can sit by the turntable showing the cover and lyrics. The app has this guide built in too, under Settings &gt; Use a phone as a second screen, and it checks each step off as you go.</p>
+  <p class="lede">The Android app works on its own: it listens with the phone's mic and shows the cover, lyrics and credits, no PC needed. If you also run Liner Notes on your PC, the phone can show the PC's screen instead. The PC app has this guide built in too, under Settings &gt; Use a phone as a second screen, and it checks each step off as you go.</p>
 
-  <h2>Android, over USB</h2>
-  <p class="note">An Android phone plugged into the PC can also listen to your records with its own microphone, and its screen sleeps and wakes with the PC.</p>
+  <h2>Android app</h2>
+  <ol>
+    <li><div><h3>Download it on the phone</h3><p>On the phone, open <a href="https://github.com/PostModernPost/linernotes/releases/download/android/LinerNotes-Android.apk">this link</a> and download the app.</p></div></li>
+    <li><div><h3>Install it</h3><p>Open the download. If the phone says it can't install apps from this source, tap Settings, turn on Allow from this source, then go back and tap Install.</p></div></li>
+    <li><div><h3>Open it and allow the microphone</h3><p>Put a record on near the phone. That's it. The app updates itself when a new version is out.</p></div></li>
+  </ol>
+
+  <h2>Connect the phone to your PC over USB</h2>
+  <p class="note">Plugged into the PC, the phone shows the PC's screen, can listen to your records with its own microphone, and sleeps and wakes with the PC.</p>
   <ol>
     <li><div><h3>Turn on developer options</h3><p>On the phone, open Settings &gt; About phone and tap Build number 7 times, until it says you're a developer. On Samsung it's under About phone &gt; Software information.</p></div></li>
     <li><div><h3>Turn on USB debugging</h3><p>Go to Settings &gt; System &gt; Developer options (on Samsung, at the bottom of Settings) and turn on USB debugging. Leave Stay awake off: Liner Notes keeps the screen on while it's showing. Optionally, set Screen lock to None so the phone comes straight back to Liner Notes when your PC wakes.</p></div></li>
     <li><div><h3>Install the Android connector</h3><p>In Liner Notes on the PC, open the phone guide and click Install. It's a small free tool from Google, about 7 MB, that lets the PC talk to the phone over USB.</p></div></li>
     <li><div><h3>Plug the phone in</h3><p>Use a cable that carries data (some charging-only cables don't). When the phone asks "Allow USB debugging?", tick "Always allow from this computer" and tap Allow.</p></div></li>
-    <li><div><h3>Open Liner Notes on the phone</h3><p>In Chrome on the phone, go to <code>localhost:8765</code>. Tap Chrome's menu and choose Install app (or Add to Home screen). Open it from that icon from now on and it runs fullscreen.</p></div></li>
+    <li><div><h3>Open Liner Notes on the phone</h3><p>Open the Android app. It switches to the PC's screen by itself within a few seconds, and goes back to working on its own about a minute after you unplug it.</p></div></li>
     <li><div><h3>Let the phone listen (optional)</h3><p>In the phone guide on the PC, turn on Listen with the phone's microphone. It sits right by the speakers, so it hears records better than a webcam across the room. The first time, tap the phone's screen once and allow the microphone.</p></div></li>
+  </ol>
+
+  <h2>Connect the phone to your PC over Wi-Fi</h2>
+  <ol>
+    <li><div><h3>Share Liner Notes on your Wi-Fi</h3><p>On the PC, open the phone guide's Wi-Fi / iPhone tab and turn on sharing. If Windows asks, allow Liner Notes on Private networks.</p></div></li>
+    <li><div><h3>Open the app on the phone</h3><p>With the phone on the same Wi-Fi, open the Android app. It finds the PC within a couple of minutes and asks to connect.</p></div></li>
+    <li><div><h3>Approve it on the PC</h3><p>The PC shows a code. Check the phone shows the same one and click Connect. You only do this once.</p></div></li>
   </ol>
 
   <h2>iPhone, over Wi-Fi</h2>
