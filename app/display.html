@@ -200,12 +200,13 @@
   /* phones and tablets: bigger targets for a finger */
   @media (pointer: coarse) { #toolbar { gap: 6px; right: 10px; }
     #toolbar button, #toolbar #tb-coffee { width: 44px; height: 44px; opacity: .7; } #toolbar svg { width: 54%; height: 54%; } }
-  #tb-listen .slash { display: none; }
-  #tb-listen.off { opacity: 1; background: rgba(227,154,122,.22); box-shadow: inset 0 0 0 1.5px rgba(227,154,122,.8); }
-  #tb-listen.off svg { stroke: #e39a7a; } #tb-listen.off .slash { display: inline; }
-  #micInd .turnOn { display: none; } #micInd.paused .turnOn { display: inline-block; }
-  #micInd.paused { background: none; padding: 0; } #micInd.paused i, #micInd.paused > span { display: none; }
-  #micInd.paused .turnOn { margin-left: 0; }
+  /* the listening on/off switch, at the left of the listening line */
+  #micSwitch { width: 2.6em; height: 1.5em; border-radius: 99px; border: 0; padding: 0; background: var(--gold); position: relative; flex: none;
+    cursor: pointer; pointer-events: auto; transition: background .2s; }
+  #micSwitch::after { content: ""; position: absolute; top: .15em; left: 1.25em; width: 1.2em; height: 1.2em; border-radius: 50%; background: var(--fg); transition: left .2s; }
+  #micSwitch[aria-checked="false"] { background: var(--faint); } #micSwitch[aria-checked="false"]::after { left: .15em; }
+  #micSwitch:focus-visible { outline: 2px solid var(--fg); outline-offset: 2px; }
+  #micInd.paused i { display: none; }
   #toolbar svg { width: 55%; height: 55%; stroke: var(--fg); fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 
   /* ---------- panels ---------- */
@@ -613,7 +614,7 @@
     <div id="slides" class="off"><div class="bgl"></div><div class="bgl hide"></div><div class="sl hide"></div><div class="sl hide"></div></div>
   </div>
   <div id="idleStatus"></div>
-  <div id="micInd"><i></i><span></span><button class="listenBtn" id="listenBtn2">Listen now</button><button class="listenBtn turnOn" id="listenOnBtn">Turn listening on</button></div>
+  <div id="micInd"><button id="micSwitch" role="switch" aria-checked="true" aria-label="Listening" title="Turn listening off"></button><i></i><span></span><button class="listenBtn" id="listenBtn2">Listen now</button></div>
   <div id="stylusNote"><span id="stylusMsg"></span><button class="pill" id="stylusLater">Later</button><button class="pill" id="stylusNew">Replaced it</button></div>
 </div>
 
@@ -623,8 +624,6 @@
 <div id="proAsk" role="dialog" aria-live="assertive"></div>
 <div id="toolbar">
   <a id="tb-coffee" href="https://buymeacoffee.com/goodisanoun" target="_blank" rel="noopener" title="Buy me a coffee" aria-label="Buy me a coffee" style="display:none">☕</a>
-  <button id="tb-listen" title="Turn listening off" aria-label="Listening is on. Turn it off" aria-pressed="true">
-    <svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/><path class="slash" d="M4 4l16 16"/></svg></button>
   <button id="lyricsBtn" title="Lyrics" aria-label="Lyrics">
     <svg viewBox="0 0 24 24"><path d="M4 6h16M4 10h16M4 14h10M4 18h7"/><path d="M18 14v6"/><circle cx="16.5" cy="20" r="1.5"/></svg></button>
   <button id="tb-search" title="Find a song or record" aria-label="Find a song or record">
@@ -1411,11 +1410,9 @@ let listeningPaused = false, listenSwitchBusy = 0;
 function showListenSwitch(paused) {
   if (Date.now() < listenSwitchBusy) return;          // just clicked: don't flicker back before the server catches up
   listeningPaused = paused;
-  const b = $("tb-listen");
-  b.classList.toggle("off", paused);
-  b.setAttribute("aria-pressed", String(!paused));
-  b.title = paused ? "Listening is off. Turn it back on" : "Turn listening off";
-  b.ariaLabel = paused ? "Listening is off. Turn it on" : "Listening is on. Turn it off";
+  const b = $("micSwitch");
+  b.setAttribute("aria-checked", String(!paused));
+  b.title = paused ? "Turn listening on" : "Turn listening off";
   $("listenRow").classList.toggle("on", !paused);
 }
 async function setListening(on) {
@@ -1426,8 +1423,7 @@ async function setListening(on) {
     toast(on ? "Listening for music again." : "Listening is off until you turn it back on.");
   } catch (e) { toast("Couldn't reach Liner Notes."); }
 }
-$("tb-listen").addEventListener("click", e => { e.stopPropagation(); setListening(listeningPaused); });
-$("listenOnBtn").addEventListener("click", e => { e.stopPropagation(); setListening(true); });
+$("micSwitch").addEventListener("click", e => { e.stopPropagation(); setListening(listeningPaused); });
 $("listenRow").addEventListener("click", () => setListening(!$("listenRow").classList.contains("on")));
 function showListening(l) {
   const active = l.mode === "active";
@@ -1444,7 +1440,7 @@ function showListening(l) {
   const ind = $("micInd");
   let txt = "Listening for music", cls = "";
   showListenSwitch(!!l.paused);
-  if (l.paused) { txt = ""; cls = "off paused"; }
+  if (l.paused) { txt = "Listening is off"; cls = "off paused"; }
   else if (!l.has_mic) { txt = "Not listening: no microphone"; cls = "off"; }
   else if (!l.mic_live) { txt = "Not listening: open Liner Notes on the phone to use its mic"; cls = "off"; }
   else if (active) { txt = "Hearing music…"; cls = "hearing"; }
