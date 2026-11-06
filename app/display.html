@@ -136,8 +136,11 @@
   #idle.show > .record, #idle.show > #idleText { display: none; }
   #idleStatus { position: fixed; left: 50%; bottom: 4vmin; transform: translateX(-50%); z-index: 3; display: none;
     background: rgba(0,0,0,.55); border: 1px solid rgba(255,255,255,.14); border-radius: 99px; padding: .5em 1.2em; color: var(--fg);
-    font-size: calc(var(--ts) * clamp(12px, 2.4vmin, 18px)); white-space: nowrap; }
+    font-size: calc(var(--ts) * clamp(12px, 2.4vmin, 18px)); white-space: nowrap;
+    max-width: 92vw; box-sizing: border-box; overflow: hidden; text-overflow: ellipsis; }
   #idle.show #idleStatus.on { display: block; }
+  /* the pill takes the bottom strip, so the last-played screen and the slideshow sit above it */
+  #idle.show.status #jp, #idle.show.status #slides .sl { bottom: calc(4vmin + var(--ts) * clamp(12px, 2.4vmin, 18px) * 3); }
   #stylusNote { position: fixed; left: 50%; top: max(9vmin, 56px); transform: translateX(-50%); z-index: 4; display: none; align-items: center; gap: .8em;
     background: rgba(0,0,0,.6); border: 1px solid rgba(201,160,74,.55); border-radius: 1.6em; padding: .45em .6em .45em 1.2em; width: max-content; color: var(--fg);
     font-size: calc(var(--ts) * clamp(12px, 2.2vmin, 17px)); max-width: 92vw; box-sizing: border-box; }
@@ -1451,17 +1454,24 @@ function showListening(l) {
   $("listenBtn2").style.display = "none";          // Listen now lives on the couldn't-identify screen only
   listenNowProgress(l.now_state);
 }
-let lastListenActive = false;
+let lastListenActive = false, doneKey = null, doneSince = 0, doneTimer = null;
+const DONE_SHOW_MS = 60000;                     // "flip to side B" / "That's the end of…" goes away after a minute
 function updateIdleText() {
   // Nothing on screen yet but the mic hears music: say so. A finished side: remind to flip.
   const active = lastListenActive;
   $("idle").classList.toggle("listening", !current && active);
   let msg = "Nothing playing";
   if (!current && active) msg = "Hearing music, figuring out what it is…";
-  else if (record && record.side_done) msg = record.next_side ? `Side ${record.done_side} is done · flip to side ${record.next_side}` : `That's the end of ${record.title}`;
+  else if (record && record.side_done) {
+    const key = `${record.title}|${record.done_side}`;
+    if (key !== doneKey) { doneKey = key; doneSince = Date.now(); clearTimeout(doneTimer); doneTimer = setTimeout(updateIdleText, DONE_SHOW_MS + 500); }
+    if (Date.now() - doneSince < DONE_SHOW_MS)
+      msg = record.next_side ? `Side ${record.done_side} is done · flip to side ${record.next_side}` : `That's the end of ${record.title}`;
+  } else doneKey = null;
   $("idleText").textContent = msg;
   $("idleStatus").textContent = msg;
   $("idleStatus").classList.toggle("on", msg !== "Nothing playing");
+  $("idle").classList.toggle("status", msg !== "Nothing playing");
   syncIdle();
 }
 
