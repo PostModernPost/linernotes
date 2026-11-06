@@ -208,8 +208,14 @@ class State:
 
     def show(self, track):
         t = self.track
-        if t and t.get("id") == track.get("id") and t.get("status") == track.get("status") and t.get("source") == track.get("source"):
+        if t and t.get("id") == track.get("id") and t.get("status") == track.get("status") and t.get("source") == track.get("source") \
+                and t.get("release_id") == track.get("release_id"):     # same song, but a different album picked: show it
             return
+        if t and self.db and t.get("id") == track.get("id") and t.get("status") == track.get("status") == "playing":
+            try:
+                self.db.change_album(track)     # and log this play under the album picked
+            except Exception as e:
+                log("history album change failed:", e)
         self._bump(track)
 
     def idle(self):
@@ -1004,7 +1010,8 @@ async def enrich_track(app, t):
 
 def show_and_enrich(app, track):
     st = app["state"]
-    same = st.track and st.track.get("id") == track.get("id") and st.track.get("source") == track.get("source")
+    same = st.track and st.track.get("id") == track.get("id") and st.track.get("source") == track.get("source") \
+        and st.track.get("release_id") == track.get("release_id")
     st.show(track)
     if not same:
         asyncio.get_running_loop().create_task(enrich_track(app, track))
@@ -3068,6 +3075,14 @@ class History:
 
     def _db(self):
         return sqlite3.connect(self.path)
+
+    def change_album(self, t):
+        """The album was picked while the song played: the play just logged belongs to that album."""
+        with self._db() as db:
+            db.execute("UPDATE plays SET album=?, album_artist=?, year=?, label=?, release_id=?, art=COALESCE(?, art) "
+                       "WHERE id=(SELECT id FROM plays WHERE lower(title)=lower(?) AND ts>=? ORDER BY ts DESC LIMIT 1)",
+                       (t.get("album"), t.get("album_artist"), t.get("year"), t.get("label"), t.get("release_id"),
+                        t.get("art"), t.get("title"), time.time() - 1800))
 
     def add(self, t):
         art = t.get("art")
