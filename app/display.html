@@ -193,6 +193,17 @@
     animation: drift 16s ease-in-out both; }
   #slides .sl .cap { color: var(--dim); font-size: calc(var(--ts) * clamp(11px, 2.2vmin, 18px)); text-align: center; max-width: 80vw; }
   #slides .sl .cap b { color: var(--fg); font-weight: 600; }
+  /* a phone on its side, between records: the cover as big as fits under the buttons, on the right, with the album, artist
+     and year stacked on its left, so it doesn't look like the song screen (cover left, words right) */
+  @media (min-aspect-ratio: 7/5) and (max-height: 600px) {
+    #slides .sl { flex-direction: row-reverse; justify-content: flex-start; gap: 5vmin; padding: var(--tbh) 4vmin 3vmin; }
+    #slides .sl img { height: calc(100vh - var(--tbh) - 3vmin); max-height: 62vw; flex: none; }
+    #slides .sl .cap { flex: 1; min-width: 0; max-width: none; text-align: right; font-size: calc(var(--ts) * clamp(14px, 4.4vmin, 26px)); line-height: 1.25; }
+    #slides .sl .cap b { display: block; font-size: 1.5em; line-height: 1.1; margin-bottom: .3em; }
+    #slides .sl .cap span { display: block; } #slides .sl .cap .dot { display: none; }
+    #jp { flex-direction: row-reverse; padding: var(--tbh) 4vmin 3vmin; gap: 5vmin; justify-content: flex-start; align-items: center; }
+    #jpArt { height: calc(100vh - var(--tbh) - 3vmin); max-height: 62vw; }
+    #jpSide { flex: 1; max-width: none; text-align: right; } #jpRecent { justify-content: flex-end; } }
   #slides .hide { opacity: 0; }
   @keyframes drift { from { transform: scale(1) translateY(.6vmin); } to { transform: scale(1.045) translateY(-.6vmin); } }
 
@@ -1605,7 +1616,7 @@ function nextSlide() {
     const sls = document.querySelectorAll("#slides .sl"), bgs = document.querySelectorAll("#slides .bgl");
     const a = slideFlip, b = 1 - slideFlip; slideFlip = b;
     slideNow = c;
-    sls[b].innerHTML = `<img src="${esc(c.art)}" alt=""><div class="cap"><b>${esc(c.album)}</b> · ${esc(c.artist)}${c.year ? " · " + esc(oneYear(c.year) || "") : ""}</div>`;
+    sls[b].innerHTML = `<img src="${esc(c.art)}" alt=""><div class="cap"><b>${esc(c.album)}</b><span class="dot"> · </span><span>${esc(c.artist)}</span>${c.year ? `<span class="dot"> · </span><span class="yr">${esc(oneYear(c.year) || "")}</span>` : ""}</div>`;
     bgs[b].style.backgroundImage = `url("${c.art}")`;
     sls[b].classList.remove("hide"); bgs[b].classList.remove("hide");
     sls[a].classList.add("hide"); bgs[a].classList.add("hide");
