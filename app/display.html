@@ -844,7 +844,7 @@
     <div>Fullscreen<small id="fsHint">Hides the browser's bars until you leave the page.</small></div><div class="switch"></div></div>
   <h3 style="margin-top:3vmin;margin-bottom:0">On the main screen</h3>
   <div class="setting" id="compRow" style="cursor:default">
-    <div>On compilations, show<small>For a song on a compilation: the compilation you're playing, the album the song first came out on (its cover and year), or the compilation with a line under it naming the album the song first came out on.</small></div>
+    <div>On compilations, show<small>For a song on a compilation: the compilation you're playing, the album the song first came out on (its cover and year), or the compilation with a line under it naming the album the song first came out on (only when it was on a full album).</small></div>
     <div class="sizes">
       <button class="pill" data-cm="compilation">The compilation</button><button class="pill" data-cm="original">The original album</button>
       <button class="pill" data-cm="both">Both</button></div></div>
@@ -1075,15 +1075,13 @@ function detailsText(t, all) {
 }
 
 // A song on a compilation, with its original album known: show the compilation, the original album, or both
-function origText(o) {                  // "Originally on <album> (year)", or "First out as a single (year)"
-  const y = o.year ? ` (${esc(o.year)})` : "", m = (o.album || "").match(/^(.*?)\s+-\s+(single|ep)$/i);
-  if (o.also) return `Also on <b>${esc(o.album)}</b>${y}`;      // a single: the album it's on
-  if (m && m[2].toLowerCase() === "single") return `First out as a single${y}`;
-  return `Originally on <b>${esc(m ? m[1] + " EP" : o.album)}</b>${y}`;
+function origText(o) {                  // "Originally on <album> (year)": full albums only, never a single or EP
+  if (!o || !o.album || /\s-\s(single|ep)$/i.test(o.album)) return "";
+  return `${o.also ? "From the album" : "Originally on"} <b>${esc(o.album)}</b>${o.year ? ` (${esc(o.year)})` : ""}`;
 }
 function compView(t) {
   const o = t && t.original;
-  if (!o || !o.album || o.also || settings.compMode !== "original") return t;
+  if (!origText(o) || o.also || settings.compMode !== "original") return t;
   return { ...t, album: o.album, year: o.year || t.year, label: null, art: o.art || t.art };
 }
 function render(t, keepArt) {
@@ -1117,7 +1115,7 @@ function render(t, keepArt) {
   $("title").textContent = t.title || "";
   $("artist").textContent = t.artist || "";
   $("album").textContent = v.album || "";
-  const o = t.original, both = o && o.album && (settings.compMode === "both" || (o.also && settings.compMode === "original"));
+  const o = t.original, both = !!origText(o) && (o.also || settings.compMode === "both");   // a single always names its album
   $("origLine").innerHTML = both ? origText(o) : "";
   $("origLine").style.display = both && !unknown ? "block" : "none";
   const det = detailsText(v);
@@ -1836,7 +1834,7 @@ async function openInfo(t) {
   $("i-details").textContent = [detailsText(t, true), t.duration_ms ? fmtDur(Math.round(t.duration_ms / 1000)) : ""].filter(Boolean).join(" · ");
   // a song on a compilation: the album it first came out on
   const o = t.original;
-  $("i-orig").innerHTML = o && o.album ? origText(o) : "";
+  $("i-orig").innerHTML = origText(o);
   $("links").innerHTML = (t.links || []).map(l =>
     `<a class="pill" href="${esc(l.url)}" target="_blank" rel="noopener">${esc(l.name)}</a>`).join("");
   $("donate").style.display = "none";              // the coffee button sits at the top of the page now

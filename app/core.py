@@ -1044,7 +1044,8 @@ def fill_artists(app, rec):
             continue
         if not t["artist"]:
             t["artist"], changed = k["artist"], True
-        if rec.various and k.get("album") and "original" not in t and norm(main_artist(k["artist"])) == norm(main_artist(t["artist"])):
+        if rec.various and k.get("album") and album_kind(k["album"]) == "album" and "original" not in t \
+                and norm(main_artist(k["artist"])) == norm(main_artist(t["artist"])):
             t["original"], changed = {"album": k["album"], "year": k["year"], "art": k.get("art")}, True
     return changed
 
@@ -1073,9 +1074,7 @@ async def find_original(app, rec, i):
     except Exception as e:
         log("original album lookup failed:", repr(e))
         return
-    # the album it's from, or (a new band's song on a compilation is often only out as one) the single or EP
-    first = [c for c in cands if c["kind"] in ("single", "ep") and norm(c["album"]) != norm(rec.title)]
-    st = studio_album(cands) or (min(first, key=lambda c: c["year"] or "9999") if first else None)
+    st = studio_album(cands)              # a full album only: a song only out as a single or EP gets no line
     if not st or norm(st["album"]) == norm(rec.title):
         return
     t["original"] = {"album": st["album"], "year": st["year"] or None, "art": st.get("art")}
