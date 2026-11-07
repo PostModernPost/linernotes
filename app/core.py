@@ -3134,6 +3134,64 @@ class History:
                     s["skips"] = x["n"]
         return list(songs.values())
 
+    # ---- keeping the shelf the same on the PC and the phone (the phone app swaps these every so often)
+    PLAY_COLS = ("ts", "title", "artist", "album", "year", "label", "genre", "source", "art", "duration_ms", "album_artist", "release_id")
+    SKIP_COLS = ("ts", "title", "artist", "album", "album_artist", "medium", "pos")
+    COLL_COLS = ("release_id", "instance_id", "title", "artist", "year", "label", "catno", "formats", "medium", "thumb", "cover", "added", "rating")
+
+    def sync_export(self):
+        with self._db() as db:
+            db.row_factory = sqlite3.Row
+            q = lambda sql, *a: [dict(r) for r in db.execute(sql, *a)]
+            return {
+                "plays": q(f"SELECT {','.join(self.PLAY_COLS)} FROM plays WHERE source IN ({','.join('?' * len(self.SHELF_MEDIA))})", self.SHELF_MEDIA),
+                "skips": q(f"SELECT {','.join(self.SKIP_COLS)} FROM skips"),
+                "hidden": q("SELECT key, ts FROM shelf_hidden"),
+                "links": q("SELECT release_id, key FROM shelf_links"),
+                "collection": q(f"SELECT {','.join(self.COLL_COLS)} FROM collection"),
+            }
+
+    def sync_merge(self, d, take_discogs=False):
+        """Add what the other side has that this one doesn't. Nothing here is removed, except the Discogs
+        copies when the other side is the one connected to Discogs (its list is the up-to-date one)."""
+        n = {"plays": 0, "skips": 0, "collection": 0}
+        same = lambda r: (round(float(r.get("ts") or 0), 3), norm(r.get("title")))
+        with self._db() as db:
+            have = {(round(ts, 3), norm(t)) for ts, t in db.execute("SELECT ts, title FROM plays")}
+            for r in d.get("plays") or []:
+                if r.get("ts") and same(r) not in have and (r.get("source") in self.SHELF_MEDIA):
+                    have.add(same(r)); n["plays"] += 1
+                    db.execute(f"INSERT INTO plays ({','.join(self.PLAY_COLS)}) VALUES ({','.join('?' * len(self.PLAY_COLS))})",
+                               [r.get(c) for c in self.PLAY_COLS])
+            have = {(round(ts, 3), norm(t)) for ts, t in db.execute("SELECT ts, title FROM skips")}
+            for r in d.get("skips") or []:
+                if r.get("ts") and same(r) not in have:
+                    have.add(same(r)); n["skips"] += 1
+                    db.execute(f"INSERT INTO skips ({','.join(self.SKIP_COLS)}) VALUES ({','.join('?' * len(self.SKIP_COLS))})",
+                               [r.get(c) for c in self.SKIP_COLS])
+            for r in d.get("hidden") or []:
+                if r.get("key"):
+                    db.execute("INSERT OR IGNORE INTO shelf_hidden (key, ts) VALUES (?, ?)", (r["key"], r.get("ts") or time.time()))
+            for r in d.get("links") or []:
+                if r.get("release_id") and r.get("key"):
+                    db.execute("INSERT OR IGNORE INTO shelf_links (release_id, key) VALUES (?, ?)", (r["release_id"], r["key"]))
+            ins = f"INSERT OR REPLACE INTO collection ({','.join(self.COLL_COLS)}) VALUES ({','.join('?' * len(self.COLL_COLS))})"
+            coll = d.get("collection") or []
+            if take_discogs:
+                db.execute("DELETE FROM collection WHERE instance_id > 0")
+                for r in coll:
+                    if (r.get("instance_id") or 0) > 0:
+                        db.execute(ins, [r.get(c) for c in self.COLL_COLS])
+            # records from your own list: the same record isn't added twice, whatever number it has on each side
+            mine = {(norm(t), norm(a)) for t, a in db.execute("SELECT title, artist FROM collection WHERE instance_id < 0")}
+            low = db.execute("SELECT min(instance_id) FROM collection").fetchone()[0] or 0
+            for r in coll:
+                k = (norm(r.get("title")), norm(r.get("artist")))
+                if (r.get("instance_id") or 0) < 0 and k not in mine:
+                    mine.add(k); low = min(low, 0) - 1; n["collection"] += 1
+                    db.execute(ins, [low if c == "instance_id" else r.get(c) for c in self.COLL_COLS])
+        return n
+
     def shelf_hide(self, key, hide=True):
         with self._db() as db:
             if hide:
@@ -4346,6 +4404,19 @@ async def api_shelf(request):
     return web.json_response({"albums": await asyncio.to_thread(db.shelf), "discogs": collection_status()})
 
 
+async def api_sync(request):
+    """The phone app keeps the shelf the same here and on the other side: GET what's here, POST what's there."""
+    db = request.app["state"].db
+    if request.method == "GET":
+        return web.json_response({**await asyncio.to_thread(db.sync_export), "discogs": bool(discogs_user())})
+    body = await request.json()
+    take = bool(body.get("discogs")) and not discogs_user()
+    n = await asyncio.to_thread(db.sync_merge, body, take)
+    if any(n.values()):
+        log(f"shelf sync: added {n['plays']} plays, {n['skips']} skips, {n['collection']} records")
+    return web.json_response({"ok": True, **n})
+
+
 async def api_shelf_hide(request):
     body = await request.json()
     if not body.get("key"):
@@ -5323,7 +5394,7 @@ async def api_phone_use_mic(request):
 # ---------------------------------------------------------------- sharing on Wi-Fi (iPhones, other devices)
 # Requests from other devices may show the screen and use search; anything that changes this PC
 # (updates, settings, phone tools, the window) only answers requests from this PC itself.
-LOCAL_ONLY = ("/api/pair/answer", "/api/devices", "/api/update", "/api/config", "/api/phone/", "/api/window", "/api/share-wifi", "/api/spotify/", "/api/lastfm/", "/api/recap/save", "/api/screen/", "/api/mic/", "/api/stylus", "/api/shelf/hide", "/api/collection", "/api/discogs/")
+LOCAL_ONLY = ("/api/pair/answer", "/api/devices", "/api/update", "/api/config", "/api/phone/", "/api/window", "/api/share-wifi", "/api/spotify/", "/api/lastfm/", "/api/recap/save", "/api/screen/", "/api/mic/", "/api/stylus", "/api/shelf/hide", "/api/collection", "/api/discogs/", "/api/sync")
 
 
 # ---------------------------------------------------------------- the phone app: pairing over Wi-Fi
@@ -5708,7 +5779,7 @@ async def on_cleanup(app):
 
 
 def build_app(demo=False):
-    app = web.Application(middlewares=[local_only_guard])
+    app = web.Application(middlewares=[local_only_guard], client_max_size=64 * 1024 * 1024)
     app["state"] = State()
     app["state"].app = app
     app["state"].db = History(os.path.join(DATA_DIR, "history.db"))
@@ -5765,6 +5836,8 @@ def build_app(demo=False):
     app.router.add_post("/api/album/name", api_album_name)
     app.router.add_post("/api/album/ask", api_album_ask)
     app.router.add_post("/api/shelf/hide", api_shelf_hide)
+    app.router.add_get("/api/sync", api_sync)
+    app.router.add_post("/api/sync", api_sync)
     app.router.add_post("/api/stylus", api_stylus)
     app.router.add_get("/api/recap", api_recap)
     app.router.add_get("/api/recap.png", api_recap_png)

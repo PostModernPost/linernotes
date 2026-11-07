@@ -233,6 +233,36 @@ class MainActivity : Activity() {
         Thread { Sweep.find(this, onFound = onPc) }.start()
     }
 
+    /**
+     * Keep the shelf the same on the phone and the PC, both ways, without a word: 30 s after the phone
+     * switches to the PC, then every 20 minutes while it's on it. The phone's own engine starts quietly
+     * for this if it isn't running (it doesn't listen; nothing sends it sound while the PC is in use).
+     */
+    @Volatile private var syncing = false
+    private val syncTick = object : Runnable {
+        override fun run() {
+            val pc = server
+            if (pc == null || Engine.isLocal(pc)) return
+            if (!syncing) {
+                syncing = true
+                Thread({
+                    try { syncShelf(pc) } catch (e: Exception) { android.util.Log.w("LinerNotes", "shelf sync", e) }
+                    syncing = false
+                }, "shelf-sync").start()
+            }
+            main.postDelayed(this, 20 * 60_000L)
+        }
+    }
+
+    private fun syncShelf(pc: String) {
+        val there = Link.call(this, pc, "/api/sync", timeoutMs = 10_000)?.takeIf { it.first == 200 } ?: return   // an older PC version: skip
+        Engine.start(this)
+        if (!Engine.waitReady(this)) return
+        val here = Link.call(this, Engine.URL, "/api/sync", timeoutMs = 10_000)?.takeIf { it.first == 200 } ?: return
+        Link.call(this, Engine.URL, "/api/sync", "POST", there.second, timeoutMs = 20_000)
+        Link.call(this, pc, "/api/sync", "POST", here.second, timeoutMs = 20_000)
+    }
+
     /** A short message on the page (the page shows it like its own). */
     private fun toastJs(msg: String) {
         web.evaluateJavascript("window.toast && toast(${JSONObject.quote(msg)})", null)
@@ -286,7 +316,8 @@ class MainActivity : Activity() {
         finder?.stop()
         searchGen = null
         server = url
-        main.removeCallbacks(lookForPc); main.removeCallbacks(pcGone)
+        main.removeCallbacks(lookForPc); main.removeCallbacks(pcGone); main.removeCallbacks(syncTick)
+        if (!Engine.isLocal(url)) main.postDelayed(syncTick, 30_000)
         if (Engine.isLocal(url)) { lookTick = 1; main.postDelayed(lookForPc, 5_000); main.postDelayed({ lookOnWifi() }, 3_000) }
         else bgFinder?.stop()
         if (!Engine.isLocal(url)) { Link.saveUrl(this, url); stayOwn = false }
@@ -421,7 +452,7 @@ class MainActivity : Activity() {
 
     private fun switchPc() {
         LinkService.stop(this)
-        main.removeCallbacks(lookForPc); main.removeCallbacks(pcGone)
+        main.removeCallbacks(lookForPc); main.removeCallbacks(pcGone); main.removeCallbacks(syncTick)
         if (!Engine.isLocal(server)) Link.forget(this)
         showSetup(); search()
     }
