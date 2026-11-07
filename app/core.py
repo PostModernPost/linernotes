@@ -1064,6 +1064,42 @@ def show_record(app, rec, track):
         rec.orig_checked = True
         asyncio.create_task(original_year(app, rec))
         asyncio.create_task(album_durations(app, rec))
+        if not getattr(rec, "from_itunes", False) and not rec.various:
+            asyncio.create_task(digital_cover(app, rec))
+
+
+async def digital_cover(app, rec):
+    """Discogs' cover is often someone's photo of their own copy (glare, a sleeve, a Japanese obi).
+    Apple Music's is the clean digital artwork: use it when Apple has the same album."""
+    want, want_a = norm(bare_album(rec.title)), norm(main_artist(rec.artist))
+    if not want or not want_a:
+        return
+    try:
+        q = urllib.parse.urlencode({"term": f"{main_artist(rec.artist)} {bare_album(rec.title)}", "entity": "album", "limit": 25})
+        async with app["http"].get(f"{ITUNES}/search?" + q) as r:
+            data = await r.json(content_type=None)
+    except Exception as e:
+        log("digital cover lookup failed:", repr(e))
+        return
+    best = None
+    for x in data.get("results", []):
+        a = norm(x.get("artistName"))
+        if not (a and (want_a in a or a in want_a)) or not x.get("artworkUrl100"):
+            continue
+        name = x.get("collectionName") or ""
+        if norm(bare_album(name)) != want:
+            continue
+        exact = norm(name) == norm(rec.title)          # the plain album beats a deluxe edition
+        if best is None or (exact and not best[0]):
+            best = (exact, x["artworkUrl100"].replace("100x100bb", "1000x1000bb"))
+    if not best:
+        return
+    old, rec.cover = rec.cover, best[1]
+    log(f"{rec.title}: using Apple Music's cover instead of the Discogs photo")
+    st = app["state"]
+    if st.track and st.track.get("source") == "record" and st.track.get("art") == old:
+        st.track["art"] = rec.cover
+        st.version += 1
 
 
 async def find_original(app, rec, i):
