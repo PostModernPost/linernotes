@@ -3034,7 +3034,7 @@ class History:
     # ---- your Discogs collection
     def collection_replace(self, items):
         with self._db() as db:
-            db.execute("DELETE FROM collection")
+            db.execute("DELETE FROM collection WHERE instance_id IS NULL OR instance_id > 0")  # keeps records added from your own list
             db.executemany("INSERT OR REPLACE INTO collection (release_id,instance_id,title,artist,year,label,catno,formats,"
                            "medium,thumb,cover,added,rating) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
                            [(i["release_id"], i["instance_id"], i["title"], i["artist"], i["year"], i["label"], i["catno"],
@@ -3090,7 +3090,11 @@ class History:
                 a = out[k] = {"key": k, "medium": medium, "album": c["title"], "artist": c["artist"], "plays": 0,
                               "first": None, "last": 0, "art": None, "year": None, "label": None, "_songs": set()}
             a["owned"] = True
-            a["release_id"] = c["release_id"]             # the copy you own
+            if (c["instance_id"] or 0) < 0:               # from your own list, not Discogs
+                a["listed"] = not a.get("_disc")
+            else:
+                a["release_id"] = c["release_id"]         # the copy you own
+                a["_disc"], a["listed"] = True, False
             a["art"] = a["art"] or c["cover"] or c["thumb"]
             a["year"] = a["year"] or c["year"]
             a["label"] = a["label"] or c["label"]
@@ -3107,6 +3111,7 @@ class History:
         for a in albums:
             a["songs"] = len(a.pop("_songs"))
             a.pop("_named", None)
+            a.pop("_disc", None)
             a["kind"] = album_kind(a["album"], None, a["artist"])
         return albums
 

@@ -2720,17 +2720,17 @@ async function loadShelf() {
   const owned = shelf.filter(a => a.owned).length, unplayed = shelf.filter(a => !a.plays).length;
   $("shelfSub").textContent = shelf.length
     ? kinds.map(m => `${counts[m]} ${counts[m] === 1 ? SHELF_MEDIA[m][1] : SHELF_MEDIA[m][2]}`).join(" · ") +
-      (owned ? `. ${owned} from your Discogs collection${unplayed ? `, ${unplayed} not played yet` : ""}.` : ", added as you play them.")
+      (owned ? `. ${owned} in your collection${unplayed ? `, ${unplayed} not played yet` : ""}.` : ", added as you play them.")
     : "Every record, CD and tape you play shows up here. Connect Discogs in Settings to add your whole collection.";
-  if (shelfMedium && !(shelfMedium === "unplayed" ? unplayed : shelfMedium === "notowned" ? shelfDiscogs.user && owned < shelf.length : counts[shelfMedium])) shelfMedium = "";
+  if (shelfMedium && !(shelfMedium === "unplayed" ? unplayed : shelfMedium === "notowned" ? shelfDiscogs.user && shelf.some(a => !a.owned || a.listed) : counts[shelfMedium])) shelfMedium = "";
   const pills = [["", "All"], ...(kinds.length > 1 ? kinds.map(m => [m, SHELF_MEDIA[m][0]]) : []), ...(unplayed && unplayed < shelf.length ? [["unplayed", "Not played yet"]] : []),
-    ...(shelfDiscogs.user && owned < shelf.length ? [["notowned", "Not on Discogs"]] : [])];
+    ...(shelfDiscogs.user && shelf.some(a => !a.owned || a.listed) ? [["notowned", "Not on Discogs"]] : [])];
   $("shelfMedia").innerHTML = pills.length > 1 ? pills.map(([m, t]) => `<button class="pill${m === shelfMedium ? " on" : ""}" data-m="${m}">${t}</button>`).join("") : "";
   drawShelf();
 }
 function drawShelf() {
   const q = $("shelfFind").value.trim().toLowerCase();
-  let list = shelf.filter(a => (!shelfMedium || (shelfMedium === "unplayed" ? !a.plays : shelfMedium === "notowned" ? !a.owned : a.medium === shelfMedium)) &&
+  let list = shelf.filter(a => (!shelfMedium || (shelfMedium === "unplayed" ? !a.plays : shelfMedium === "notowned" ? !a.owned || a.listed : a.medium === shelfMedium)) &&
     (!q || (a.album + " " + a.artist + " " + (a.label || "")).toLowerCase().includes(q)));
   const by = { recent: (a, b) => b.last - a.last, most: (a, b) => b.plays - a.plays || b.last - a.last,
                artist: (a, b) => (a.artist || "").localeCompare(b.artist || "", undefined, { sensitivity: "base" }) || (a.year || "").localeCompare(b.year || ""),
@@ -2755,9 +2755,9 @@ async function openShelfItem(key) {
   $("sdInfo").innerHTML = `<h3>${esc(a.album)}</h3><p style="font-size:1.15em;margin:.3em 0 1em">${esc(a.artist)}</p>
     <p class="muted" style="margin:.2em 0">${[a.kind === "single" && a.medium === "vinyl" ? "45" : SHELF_MEDIA[a.medium][0], KIND_NAME[a.kind], a.year, a.label].filter(Boolean).map(esc).join(" · ")}</p>
     <p class="muted" style="margin:.2em 0">${!a.plays ? "Not played with Liner Notes yet" : `${a.plays === 1 ? "Played once" : `Played ${a.plays} times`}, ${shortDate(a.first) === shortDate(a.last) ? "on " + shortDate(a.last) : `first on ${shortDate(a.first)}, last on ${shortDate(a.last)}`}`}</p>
-    ${a.owned ? `<p class="muted" style="margin:.2em 0">In your Discogs collection${a.added ? " since " + new Date(a.added + "T12:00").toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }) : ""}${a.formats ? " · " + esc(a.formats) : ""}${a.catno && a.catno !== "none" ? " · " + esc(a.catno) : ""}</p>` : ""}
+    ${a.owned ? `<p class="muted" style="margin:.2em 0">${a.listed ? "In your collection" : "In your Discogs collection"}${a.added ? " since " + new Date(a.added + "T12:00").toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }) : ""}${a.formats ? " · " + esc(a.formats) : ""}${a.catno && a.catno !== "none" ? " · " + esc(a.catno) : ""}</p>` : ""}
     ${a.release_id ? `<p class="muted" id="sdMarket" style="margin:.2em 0"></p>` : ""}
-    ${!a.owned && shelfDiscogs.user ? `<div id="sdAdd" style="margin-top:1em"><span class="muted">Not in your Discogs collection.</span>
+    ${(!a.owned || a.listed) && shelfDiscogs.user ? `<div id="sdAdd" style="margin-top:1em"><span class="muted">Not in your Discogs collection.</span>
       <button class="pill" id="sdAddBtn" style="margin-left:.6em">Add to Discogs</button><div id="sdPress"></div></div>` : ""}
     ${a.skips ? `<p class="${a.worn ? "worn" : "muted"}" style="margin:.8em 0 .2em">${a.worn ? "Skips often: may need replacing." : a.skips === 1 ? "Skipped once." : `Skipped ${a.skips} times.`}
       <span class="muted">${a.skip_songs.length ? "In " + a.skip_songs.map(x => "“" + esc(x) + "”").join(", ") + ". " : ""}${a.worn ? "Try cleaning it and checking the stylus first; if the same spots keep skipping, it's worn or scratched." : "One skip is usually dust or a bump."}</span></p>` : ""}
