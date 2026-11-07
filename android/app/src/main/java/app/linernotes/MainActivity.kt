@@ -13,6 +13,7 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.os.Message
+import android.view.MotionEvent
 import android.view.View
 import android.view.WindowInsets
 import android.view.WindowInsetsController
@@ -47,6 +48,12 @@ class MainActivity : Activity() {
     private var pairUrl: String? = null
     private var dark = false
     private var askedMic = false
+    private var lastTouch = 0L                   // when the screen was last touched
+
+    override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
+        lastTouch = System.currentTimeMillis()
+        return super.dispatchTouchEvent(ev)
+    }
 
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -460,7 +467,12 @@ class MainActivity : Activity() {
     /** What the page (setup page or the PC's screen) can ask the app to do. */
     inner class Bridge {
         @JavascriptInterface fun keepAwake(on: Boolean) = main.post {
-            if (on) { LinkService.screenOffWanted = false; keepOn(true) } else keepOn(false)     // a tap on the dark screen wakes it
+            if (on) {
+                // A page that just loaded (say, the phone carrying on by itself after the PC went to sleep) asks too:
+                // while the screen is meant to be dark, only a tap on it wakes it.
+                if (LinkService.screenOffWanted && System.currentTimeMillis() - lastTouch > 5_000) return@post
+                LinkService.screenOffWanted = false; keepOn(true)
+            } else keepOn(false)
         }.let { }
         @JavascriptInterface fun screenOff() = main.post { goDark() }.let { }
         @JavascriptInterface fun share(title: String?, text: String?, url: String?) = main.post { shareText(title ?: "", text ?: "", url ?: "") }.let { }

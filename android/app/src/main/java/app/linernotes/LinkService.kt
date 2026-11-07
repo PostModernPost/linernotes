@@ -106,9 +106,16 @@ class LinkService : Service() {
 
     private fun loop() {
         var nextProbe = 0L
+        var lastUrl: String? = null
         while (!stopping) {
             val url = serverUrl
             if (url == null) { Thread.sleep(1000); continue }
+            if (url != lastUrl) {
+                // Switched to another Liner Notes (the PC went to sleep and the phone carries on by itself):
+                // that's not the PC coming back, so the screen stays as it is.
+                if (lastUrl != null) { awayDark = false; failSince = 0L }
+                lastUrl = url
+            }
             val r = Link.call(this, url, "/api/now", timeoutMs = 2500)
             val now = System.currentTimeMillis()
             reachable = r != null && r.first == 200
