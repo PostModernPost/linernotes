@@ -10,7 +10,7 @@ Everything to paste into Play Console. Images are in this folder.
 Album art, lyrics and credits for the record on your turntable, on your phone.
 
 **Full description:**
-Liner Notes turns your phone into the screen by your turntable.
+Liner Notes puts the liner notes for the record you are playing on your phone, so you can read them from your desk or the couch without getting up for the sleeve.
 
 Put a record on. Liner Notes hears it, names the song, and shows the cover, the lyrics and who played on it. It follows the record song by song, side by side, and tells you when to flip.
 
