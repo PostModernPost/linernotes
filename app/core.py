@@ -16,6 +16,7 @@ Other options:
 import argparse
 import asyncio
 import collections
+import difflib
 import itertools
 import hashlib
 import io
@@ -1775,7 +1776,23 @@ class RecordSession:
                 if not na or not ta or na in ta or ta in na:
                     return i
                 best = best if best is not None else i
-        return best
+        if best is not None:
+            return best
+        # Close enough: Shazam and the tracklist often word a title a little differently
+        # ('Come and Dream Some Paradise (Theme from Gordon's War)' vs 'Come On And Dream Some Paradise')
+        bare = lambda s: norm(re.sub(r"\([^)]*\)|\[[^\]]*\]", "", s or ""))
+        bt = bare(title)
+        if len(bt) < 8:
+            return None
+        top, top_r = None, 0.0
+        for i, t in enumerate(self.tracks):
+            tt, ta = bare(t["title"]), norm(t["artist"])
+            if len(tt) < 8 or (na and ta and na not in ta and ta not in na):
+                continue
+            r = difflib.SequenceMatcher(None, bt, tt).ratio()
+            if r > top_r:
+                top, top_r = i, r
+        return top if top_r >= 0.88 else None
 
     # ---- what goes on screen
     def track(self):
@@ -2358,7 +2375,8 @@ async def _turntable_inner(app, mic, shz):
             return
         found.auto = True
         found.tentative = tentative          # not sure yet: the next song confirms it or picks another release
-        if not found.medium:
+        if medium in ("vinyl", "cd", "cassette") or not found.medium:
+            # what you said you play (Settings, or picked for this session) beats the format of the release it guessed
             found.medium = medium if medium in ("vinyl", "cd", "cassette") else None
         app["record"] = found
         log(f"following the album: {found.artist} - {found.title}, now {found.tracks[idx]['pos']} "
@@ -2409,7 +2427,7 @@ async def _turntable_inner(app, mic, shz):
             return
         if found:
             found.auto, found.tentative = True, False
-            if not found.medium:
+            if medium in ("vinyl", "cd", "cassette") or not found.medium:
                 found.medium = medium if medium in ("vinyl", "cd", "cassette") else None
             app["record"] = found
             app.pop("album_ask", None)
