@@ -578,6 +578,31 @@
   .switch::after { content: ""; position: absolute; top: .15em; left: .15em; width: 1.2em; height: 1.2em; border-radius: 50%; background: var(--fg); transition: left .2s; }
   .setting.on .switch { background: var(--gold); } .setting.on .switch::after { left: 1.25em; }
 
+  /* ---------- first-time guide ---------- */
+  #guide { position: fixed; inset: 0; z-index: 40; display: none; align-items: center; justify-content: center;
+    background: rgba(8,8,10,.97); padding: 16px; }
+  #guide.open { display: flex; }
+  #guideCard { width: min(560px, 100%); max-height: 100%; overflow-y: auto; font-size: clamp(14px, 2.6vmin, 17px); }
+  #guide h2 { margin: 0 0 .5em; font-size: 1.6em; line-height: 1.15; }
+  #guide p { color: var(--dim); margin: 0 0 1em; line-height: 1.45; }
+  #guide .setting { font-size: 1em; cursor: pointer; }
+  #guide .gStep { display: none; } #guide .gStep.on { display: block; }
+  #guide .gChoices { display: flex; flex-wrap: wrap; gap: .6em; margin: .4em 0 1.2em; }
+  #guide .gChoices .pill { font-size: 1em; padding: .55em 1.1em; cursor: pointer; }
+  #guide .gTour { list-style: none; padding: 0; margin: 0 0 1.2em; }
+  #guide .gTour li { display: flex; gap: .9em; align-items: flex-start; margin-bottom: .9em; line-height: 1.4; }
+  #guide .gTour svg { width: 1.6em; height: 1.6em; flex: none; fill: none; stroke: var(--gold); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+  #guide .gTour b { display: block; }
+  #guide .gTour span { color: var(--dim); }
+  #guideNav { display: flex; align-items: center; gap: .8em; margin-top: 1.4em; }
+  #guideNav .dots { flex: 1; display: flex; gap: 6px; }
+  #guideNav .dots i { width: 7px; height: 7px; border-radius: 50%; background: var(--faint); }
+  #guideNav .dots i.on { background: var(--gold); }
+  #guideNext { background: var(--gold); color: #111; border: 0; border-radius: 99px; padding: .6em 1.5em; font: inherit; font-weight: 650; cursor: pointer; }
+  #guideBack { background: none; border: 0; color: var(--dim); font: inherit; cursor: pointer; padding: .6em .4em; }
+  #guideSkip { position: absolute; top: max(14px, env(safe-area-inset-top)); right: 16px; background: none; border: 0; color: var(--dim);
+    font: inherit; font-size: clamp(14px, 2.6vmin, 17px); cursor: pointer; padding: .5em; }
+  #guideSkip:hover, #guideBack:hover { color: var(--fg); }
   #updDot { position: absolute; top: 18%; right: 18%; width: 9px; height: 9px; border-radius: 50%; background: var(--gold); display: none; }
   #tb-settings { position: relative; }
   #updPill { position: fixed; left: 2vmin; bottom: max(2vmin, env(safe-area-inset-bottom)); display: none; z-index: 5; background: rgba(201,160,74,.92);
@@ -1006,6 +1031,44 @@
     <div class="row solo-only" style="margin-top:.6em"><button class="pill" id="appLog">Send the log</button><span class="muted">If something isn't working on the phone, send this to whoever is helping you.</span></div>
     <div class="row" id="updRow"></div>
     <div id="updNotes"></div>
+    <div class="row" style="margin-top:.6em"><button class="pill" id="guideAgain">Show the welcome guide again</button></div>
+  </div>
+</div>
+
+<!-- first-time guide -->
+<div id="guide" role="dialog" aria-modal="true" aria-label="Welcome to Liner Notes">
+  <button id="guideSkip">Skip</button>
+  <div id="guideCard">
+    <div class="gStep on">
+      <h2>Welcome to Liner Notes</h2>
+      <p>Put on a record, CD or tape. Liner Notes hears it and shows the cover, the lyrics, the credits and the band's story, so you can read about it without getting up for the sleeve.</p>
+      <p>It also follows the album song by song and keeps track of what you play.</p>
+    </div>
+    <div class="gStep">
+      <h2>What do you mostly play?</h2>
+      <p>Songs Liner Notes hears count as this. You can change it for any song from the button under it.</p>
+      <div class="gChoices" id="gMedia">
+        <button class="pill" data-rm="vinyl">Vinyl</button><button class="pill" data-rm="cd">CD</button>
+        <button class="pill" data-rm="cassette">Cassette</button><button class="pill" data-rm="">A mix: ask me</button></div>
+    </div>
+    <div class="gStep">
+      <h2>How do you listen?</h2>
+      <div class="setting" id="gFollow"><div>Follow the album<small>Once a song is recognized, show the album's next songs in order. Turn off if you mostly play mixtapes.</small></div><div class="switch"></div></div>
+      <div class="setting" id="gAlbum"><div>Album mode<small>You play whole albums, not singles. If the first song isn't from the band's own album, Liner Notes looks for the compilation it opens and asks if that's the one.</small></div><div class="switch"></div></div>
+      <div class="setting" id="gLyrics"><div>Lyrics beside the cover<small>Show the words next to the cover as the song plays, on this screen.</small></div><div class="switch"></div></div>
+      <p style="margin-top:1em">All of these are in Settings too.</p>
+    </div>
+    <div class="gStep">
+      <h2>Where things are</h2>
+      <ul class="gTour">
+        <li><svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M4 15l4-4 5 5 3-3 4 4"/></svg><div><b>Tap the song</b><span>for the album, the band's story, credits, lyrics and similar bands.</span></div></li>
+        <li><svg viewBox="0 0 24 24"><path d="M3 20h18M5 20V6M9 20V4M13 20V8"/><circle cx="18" cy="15" r="4"/><circle cx="18" cy="15" r=".6"/></svg><div><b>Your records</b><span>This button at the top has your shelf, the songs you saved with the heart, and your listening stats.</span></div></li>
+        <li><svg viewBox="0 0 24 24"><rect x="2" y="8" width="20" height="8" rx="4"/><circle cx="18" cy="12" r="2.5"/></svg><div><b>Listening on and off</b><span>The switch beside "Listening for music" turns the microphone on or off.</span></div></li>
+        <li class="gPhone"><svg viewBox="0 0 24 24"><rect x="7" y="2" width="10" height="20" rx="2"/><path d="M11 18h2"/></svg><div><b>On your phone too</b><span>Settings &gt; Phone screen shows the same page on your phone.</span></div></li>
+      </ul>
+    </div>
+    <div id="guideNav"><div class="dots"><i class="on"></i><i></i><i></i><i></i></div>
+      <button id="guideBack" style="visibility:hidden">Back</button><button id="guideNext">Next</button></div>
   </div>
 </div>
 
@@ -1182,6 +1245,7 @@ async function poll() {
     mediaDefault = d.media_default || "";
     $("followAlbumRow").classList.toggle("on", d.follow_album !== false);
     $("albumModeRow").classList.toggle("on", !!d.album_mode);
+    maybeGuide(d);
     document.querySelectorAll("#pcMediaRow [data-pm]").forEach(b => b.classList.toggle("on", b.dataset.pm === (d.pc_media || "music")));
     document.querySelectorAll("#mediaRow [data-rm]").forEach(b => b.classList.toggle("on", b.dataset.rm === mediaDefault));
     if (!mediumPicking) $("mediumAsk").classList.toggle("on", !!d.ask_medium && !mediumBusy);
@@ -3154,6 +3218,48 @@ if (IN_APP) {
 applySettings();
 poll();
 setInterval(poll, 1500);
+
+// ---------------------------------------------------------------- first-time guide (once per Liner Notes, skippable)
+let guideStep = 0, guideShown = false;
+const cfgPost = body => fetch("/api/config", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }).catch(() => {});
+function guideGo(n) {
+  const steps = [...document.querySelectorAll("#guide .gStep")];
+  guideStep = Math.max(0, Math.min(n, steps.length - 1));
+  steps.forEach((x, i) => x.classList.toggle("on", i === guideStep));
+  document.querySelectorAll("#guideNav .dots i").forEach((x, i) => x.classList.toggle("on", i === guideStep));
+  $("guideBack").style.visibility = guideStep ? "visible" : "hidden";
+  $("guideNext").textContent = guideStep === steps.length - 1 ? "Done" : "Next";
+}
+function openGuide() {
+  guideShown = true;
+  document.querySelectorAll(".panel.open").forEach(p => closePanel(p.id));
+  document.querySelectorAll("#gMedia [data-rm]").forEach(b => b.classList.toggle("on", b.dataset.rm === (mediaDefault || "")));
+  $("gFollow").classList.toggle("on", $("followAlbumRow").classList.contains("on"));
+  $("gAlbum").classList.toggle("on", $("albumModeRow").classList.contains("on"));
+  $("gLyrics").classList.toggle("on", !!settings.lyricsBeside);
+  $("gLyrics").style.display = isPro() ? "" : "none";
+  document.querySelector("#guide .gPhone").style.display = IN_APP || IS_PHONE ? "none" : "";
+  guideGo(0);
+  $("guide").classList.add("open");
+}
+function closeGuide() { $("guide").classList.remove("open"); cfgPost({ guide_done: true }); }
+function maybeGuide(d) { if (!guideShown && d && d.guide_done === false) openGuide(); }
+$("guide").addEventListener("click", e => e.stopPropagation());
+$("guideSkip").addEventListener("click", closeGuide);
+$("guideBack").addEventListener("click", () => guideGo(guideStep - 1));
+$("guideNext").addEventListener("click", () => { if (guideStep === document.querySelectorAll("#guide .gStep").length - 1) closeGuide(); else guideGo(guideStep + 1); });
+$("gMedia").addEventListener("click", e => {
+  const b = e.target.closest("[data-rm]"); if (!b) return;
+  mediaDefault = b.dataset.rm;
+  document.querySelectorAll("#gMedia [data-rm]").forEach(x => x.classList.toggle("on", x === b));
+  document.querySelectorAll("#mediaRow [data-rm]").forEach(x => x.classList.toggle("on", x.dataset.rm === b.dataset.rm));
+  cfgPost({ room_medium: b.dataset.rm || null });
+});
+$("gFollow").addEventListener("click", () => { const on = !$("gFollow").classList.contains("on"); $("gFollow").classList.toggle("on", on); $("followAlbumRow").classList.toggle("on", on); cfgPost({ follow_album: on }); });
+$("gAlbum").addEventListener("click", () => { const on = !$("gAlbum").classList.contains("on"); $("gAlbum").classList.toggle("on", on); $("albumModeRow").classList.toggle("on", on); cfgPost({ album_mode: on }); });
+$("gLyrics").addEventListener("click", () => { settings.lyricsBeside = !settings.lyricsBeside; $("gLyrics").classList.toggle("on", settings.lyricsBeside); saveSettings(); applySettings(); });
+$("guideAgain").addEventListener("click", e => { e.stopPropagation(); openGuide(); });
+document.addEventListener("keydown", e => { if (e.key === "Escape" && $("guide").classList.contains("open")) closeGuide(); });
 </script>
 </body>
 </html>

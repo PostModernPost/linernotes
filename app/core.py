@@ -84,6 +84,7 @@ CFG = {
     "listening_paused": False,     # the listener turned listening off (main screen or Settings) until turned back on
     "album_mode": False,           # a whole album is playing: a first song that doesn't open the band's album may be on a compilation
     "follow_album": True,          # after a song is recognized on physical media, follow its album's tracklist
+    "guide_done": False,           # the first-time guide was finished or skipped
     "stylus_since": None,          # when the current stylus went on (unix time); None = since the first record in Liner Notes
     "stylus_start_hours": 0,       # hours the stylus already had when tracking started
     "stylus_life_hours": 1000,     # replace it around here (most diamond styli: 800 to 1,000 hours)
@@ -3764,6 +3765,8 @@ async def api_config(request):
         cfg["follow_album"] = CFG["follow_album"] = bool(body.get("follow_album"))
     if "album_mode" in body:
         cfg["album_mode"] = CFG["album_mode"] = bool(body.get("album_mode"))
+    if "guide_done" in body:
+        cfg["guide_done"] = CFG["guide_done"] = bool(body.get("guide_done"))
     if body.get("mic_sensitivity") in SENSITIVITY:
         cfg["mic_sensitivity"] = CFG["mic_sensitivity"] = body["mic_sensitivity"]
     if "room_medium" in body:
@@ -5542,6 +5545,7 @@ async def api_now(request):
                               "media_default": CFG.get("room_medium"),
                               "follow_album": CFG.get("follow_album", True),
                               "album_mode": CFG.get("album_mode", False),
+                              "guide_done": bool(CFG.get("guide_done")),
                               "pc_media": CFG.get("pc_media", "music"),
                               "ask_medium": bool(st.track and st.track.get("source") in ROOM_SOURCES and st.track.get("status") == "playing"
                                                  and not st.track.get("medium") and not room_medium(request.app)),
