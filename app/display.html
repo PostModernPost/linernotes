@@ -78,10 +78,6 @@
   #source.ending { animation: sideEnd 2.4s ease-in-out infinite; }
   @keyframes sideEnd { 0%, 100% { color: var(--dim); } 50% { color: var(--gold); } }
   @media (prefers-reduced-motion: reduce) { #source.ending { animation: none; color: var(--gold); } }
-  #infoBtn { width: calc(var(--ts) * clamp(26px, 5vmin, 36px)); height: calc(var(--ts) * clamp(26px, 5vmin, 36px)); border-radius: 50%;
-    border: 1.5px solid rgba(255,255,255,.45); background: none; color: var(--fg); cursor: pointer; flex: none;
-    font: italic 600 calc(var(--ts) * clamp(13px, 2.6vmin, 19px)) Georgia, serif; display: grid; place-items: center; padding: 0; }
-  #infoBtn:hover { background: rgba(255,255,255,.12); }
 
   /* lyrics mode: title above the art, artist and album below it, lyrics in their own column */
   #artCol { display: contents; }
@@ -250,7 +246,13 @@
     font: 700 19px/1 system-ui, sans-serif; white-space: nowrap; text-decoration: none; }
   .bmc.noimg img { display: none; } .bmc.noimg .alt { display: flex; }
   @media (max-width: 520px) { .bmc img { height: 44px !important; width: 159px !important; } .bmc .alt { height: 44px; font-size: 15px; } }
+  @media (max-width: 560px) { .bmc:not([style*="none"]) ~ .libTabs { margin-top: 46px; } }   /* the tabs go below the coffee button */
   #tb-coffee { font-size: clamp(17px, 3.6vmin, 25px); line-height: 1; text-decoration: none; opacity: .9 !important; }
+  .libTabs { display: flex; gap: 1.4em; flex-wrap: wrap; }
+  .libTabs button { background: none; border: 0; padding: 0 0 .15em; cursor: pointer; color: var(--dim); font: inherit;
+    font-size: calc(var(--ts) * clamp(18px, 4.5vmin, 40px)); font-weight: 650; border-bottom: 2px solid transparent; }
+  .libTabs button:hover { color: var(--fg); }
+  .libTabs button.on { color: var(--fg); border-bottom-color: var(--gold); }
   .panel h2 { margin: 0; font-size: calc(var(--ts) * clamp(18px, 4.5vmin, 40px)); }
   .panel h3 { font-size: calc(var(--ts) * clamp(11px, 2vmin, 14px)); letter-spacing: .1em; text-transform: uppercase; color: var(--dim); margin: 0 0 1em; }
   .sub { color: var(--dim); margin: .3em 0 1.2em; font-size: calc(var(--ts) * clamp(13px, 2.8vmin, 22px)); }
@@ -600,7 +602,7 @@
   <div id="artCol">
     <p id="lyTitle" class="clamp"></p>
     <img id="art" alt="">
-    <div id="lyBelow"><p id="lyArtist" class="clamp"></p><p id="lyAlbum" class="clamp"></p><button class="heart" id="lyHeart" aria-label="Save this song" title="Save this song"><svg viewBox="0 0 24 24"><path d="M12 20.5s-7.5-4.6-7.5-10.2A4.3 4.3 0 0 1 12 7.6a4.3 4.3 0 0 1 7.5 2.7c0 5.6-7.5 10.2-7.5 10.2z"/></svg></button><button class="heart shareBtn" id="lyShare" aria-label="Share this song" title="Share this song"><svg viewBox="0 0 24 24"><path d="M12 15V3M7.5 7.5 12 3l4.5 4.5"/><path d="M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7"/></svg></button></div>
+    <div id="lyBelow"><p id="lyArtist" class="clamp"></p><p id="lyAlbum" class="clamp"></p><button class="heart" id="lyHeart" aria-label="Save this song" title="Save this song"><svg viewBox="0 0 24 24"><path d="M12 20.5s-7.5-4.6-7.5-10.2A4.3 4.3 0 0 1 12 7.6a4.3 4.3 0 0 1 7.5 2.7c0 5.6-7.5 10.2-7.5 10.2z"/></svg></button><button class="heart shareBtn" id="lyShare" aria-label="Share this song" title="Share this song"><svg viewBox="0 0 24 24"><circle cx="18" cy="5" r="2.6"/><circle cx="6" cy="12" r="2.6"/><circle cx="18" cy="19" r="2.6"/><path d="m8.3 10.7 7.4-4.4M8.3 13.3l7.4 4.4"/></svg></button></div>
   </div>
   <div id="lyricsCol"><div id="lyricLines"></div></div>
   <div id="side">
@@ -611,7 +613,7 @@
     <p id="origLine" class="clamp"></p>
     <p id="details"></p>
     <div id="progress"><div class="bar"><div id="progFill"></div></div><span id="progText"></span></div>
-    <div class="metaRow"><button id="mediumBtn" title="Change what it's playing on" aria-haspopup="true"><span id="mediumBtnText"></span><svg viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></button><button class="heart" id="heartBtn" aria-label="Save this song" title="Save this song"><svg viewBox="0 0 24 24"><path d="M12 20.5s-7.5-4.6-7.5-10.2A4.3 4.3 0 0 1 12 7.6a4.3 4.3 0 0 1 7.5 2.7c0 5.6-7.5 10.2-7.5 10.2z"/></svg></button><button class="heart shareBtn" id="shareBtn" aria-label="Share this song" title="Share this song"><svg viewBox="0 0 24 24"><path d="M12 15V3M7.5 7.5 12 3l4.5 4.5"/><path d="M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7"/></svg></button><button id="infoBtn" aria-label="More about this song" title="More about this song">i</button></div>
+    <div class="metaRow"><button id="mediumBtn" title="Change what it's playing on" aria-haspopup="true"><span id="mediumBtnText"></span><svg viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></button><button class="heart" id="heartBtn" aria-label="Save this song" title="Save this song"><svg viewBox="0 0 24 24"><path d="M12 20.5s-7.5-4.6-7.5-10.2A4.3 4.3 0 0 1 12 7.6a4.3 4.3 0 0 1 7.5 2.7c0 5.6-7.5 10.2-7.5 10.2z"/></svg></button><button class="heart shareBtn" id="shareBtn" aria-label="Share this song" title="Share this song"><svg viewBox="0 0 24 24"><circle cx="18" cy="5" r="2.6"/><circle cx="6" cy="12" r="2.6"/><circle cx="18" cy="19" r="2.6"/><path d="m8.3 10.7 7.4-4.4M8.3 13.3l7.4 4.4"/></svg></button></div>
     <div id="mediumAsk"><span id="mediumAskTitle">What's playing it?</span>
       <div class="row"><button class="pill" data-m="vinyl">Vinyl</button><button class="pill" data-m="cd">CD</button><button class="pill" data-m="cassette">Cassette</button><button class="pill" data-m="radio">Radio</button><button class="pill" data-m="other">Other</button></div>
       <label><input type="checkbox" id="mediumDefault"> Always use this</label></div>
@@ -645,12 +647,8 @@
     <svg viewBox="0 0 24 24"><path d="M4 6h16M4 10h16M4 14h10M4 18h7"/><path d="M18 14v6"/><circle cx="16.5" cy="20" r="1.5"/></svg></button>
   <button id="tb-search" title="Find a song or record" aria-label="Find a song or record">
     <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg></button>
-  <button id="tb-saved" title="Saved songs" aria-label="Saved songs">
-    <svg viewBox="0 0 24 24"><path d="M12 20.5s-7.5-4.6-7.5-10.2A4.3 4.3 0 0 1 12 7.6a4.3 4.3 0 0 1 7.5 2.7c0 5.6-7.5 10.2-7.5 10.2z"/></svg></button>
-  <button id="tb-shelf" title="Your shelf" aria-label="Your shelf">
+  <button id="tb-library" title="Your shelf, saved songs and stats" aria-label="Your shelf, saved songs and stats">
     <svg viewBox="0 0 24 24"><path d="M3 20h18M5 20V6M9 20V4M13 20V8"/><circle cx="18" cy="15" r="4"/><circle cx="18" cy="15" r=".6"/></svg></button>
-  <button id="tb-stats" title="Listening history" aria-label="Listening history">
-    <svg viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg></button>
   <button id="tb-settings" title="Settings" aria-label="Settings"><span id="updDot"></span>
     <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button>
 </div>
@@ -795,7 +793,7 @@
 <!-- saved songs -->
 <div id="saved" class="panel">
   <button class="close" aria-label="Close">&times;</button>
-  <h2>Saved songs</h2>
+  <div class="libTabs" role="tablist"><button role="tab" data-lib="shelf">Shelf</button><button role="tab" data-lib="saved" class="on" aria-selected="true">Saved</button><button role="tab" data-lib="stats">Stats</button></div>
   <div class="sub" id="savedSub">Tap the heart on the main screen to keep a song here.</div>
   <div id="savedBody"></div>
 </div>
@@ -803,7 +801,7 @@
 <!-- stats -->
 <div id="shelf" class="panel">
   <button class="close" aria-label="Close">&times;</button>
-  <h2>Your shelf</h2>
+  <div class="libTabs" role="tablist"><button role="tab" data-lib="shelf" class="on" aria-selected="true">Shelf</button><button role="tab" data-lib="saved">Saved</button><button role="tab" data-lib="stats">Stats</button></div>
   <div class="sub" id="shelfSub">Every record, CD and tape you've played, added as you play it.</div>
   <div id="shelfList">
     <div id="shelfTools">
@@ -823,7 +821,7 @@
 
 <div id="stats" class="panel">
   <button class="close" aria-label="Close">&times;</button>
-  <h2>Your listening</h2>
+  <div class="libTabs" role="tablist"><button role="tab" data-lib="shelf">Shelf</button><button role="tab" data-lib="saved">Saved</button><button role="tab" data-lib="stats" class="on" aria-selected="true">Stats</button></div>
   <div class="row" id="ranges" style="margin-top:1.2em">
     <button class="pill" data-days="7">7 days</button><button class="pill on" data-days="30">30 days</button>
     <button class="pill" data-days="365">Year</button><button class="pill" data-days="0">All time</button>
@@ -1150,7 +1148,6 @@ function render(t, keepArt) {
   $("mediumBtn").style.display = inRoom && !unknown ? "inline-flex" : "none";
   $("findBtn").style.display = unknown ? "inline-block" : "none";
   $("listenBtn").style.display = unknown && ["turntable", "record", "manual"].includes(t.source) ? "inline-block" : "none";
-  $("infoBtn").style.display = unknown ? "none" : "grid";
   $("heartBtn").style.display = unknown ? "none" : "grid";
   $("shareBtn").style.display = unknown ? "none" : "grid";
   $("lyShare").style.visibility = unknown ? "hidden" : "visible";
@@ -2106,7 +2103,17 @@ $("savedBody").addEventListener("click", async e => {
   if (current && current.id === line.dataset.tid) setHearts(false);
   loadSaved();
 });
-$("tb-saved").addEventListener("click", e => { e.stopPropagation(); openPanel("saved"); loadSaved(); });
+// Your shelf, saved songs and stats: one button, three tabs (it opens on the one used last)
+function openLibrary(tab) {
+  if (!tab) { try { tab = localStorage.getItem("libTab"); } catch (e) {} }
+  if (!["shelf", "saved", "stats"].includes(tab)) tab = "shelf";
+  try { localStorage.setItem("libTab", tab); } catch (e) {}
+  openPanel(tab);
+  if (!isPro()) return;
+  ({ shelf: loadShelf, saved: loadSaved, stats: loadStats })[tab]();
+}
+$("tb-library").addEventListener("click", e => { e.stopPropagation(); openLibrary(); });
+document.querySelectorAll(".libTabs button").forEach(b => b.addEventListener("click", e => { e.stopPropagation(); openLibrary(b.dataset.lib); }));
 
 // Spotify connection (settings)
 let spPoll = null;
@@ -2530,13 +2537,11 @@ async function openSong(spec) {
   } catch (e) {}
 }
 $("findBtn").addEventListener("click", e => { e.stopPropagation(); openSearch(); });
-$("infoBtn").addEventListener("click", e => { e.stopPropagation(); openInfo(); });
 $("tb-search").addEventListener("click", e => { e.stopPropagation(); openSearch(); });
 $("lyricsBtn").addEventListener("click", e => {
   e.stopPropagation(); if (!isPro()) { showUnlock(); return; }
   settings.lyricsBeside = !settings.lyricsBeside; saveSettings(); applySettings();
 });
-$("tb-stats").addEventListener("click", e => { e.stopPropagation(); openPanel("stats"); loadStats(); });
 
 // ---------------------------------------------------------------- compilations: which album is this?
 let albumAsk = null, albumName = null;
@@ -2801,7 +2806,6 @@ $("dcTokForm").addEventListener("submit", e => { e.preventDefault(); const t = $
 $("dcNow").addEventListener("click", () => collectionCall({}));
 $("dcOff").addEventListener("click", () => collectionCall({ action: "disconnect" }));
 $("tb-settings").addEventListener("click", loadCollection);
-$("tb-shelf").addEventListener("click", e => { e.stopPropagation(); openPanel("shelf"); loadShelf(); });
 $("tb-settings").addEventListener("click", e => { e.stopPropagation(); applySettings(); openPanel("settings"); });
 
 // ---------------------------------------------------------------- the phone app asks to pair (shown on the PC)

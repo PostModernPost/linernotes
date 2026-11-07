@@ -160,9 +160,9 @@ ACTIONS = {
     "main": "",
     "recognized": "",
     "lyrics": "settings.lyricsBeside = true; applySettings(); if (current) render(current, true);",
-    "info": "document.getElementById('infoBtn').click();",
+    "info": "openInfo();",
     "tracklist": "openRecords();",
-    "shelf": "document.getElementById('tb-shelf').click();",
+    "shelf": "openLibrary('shelf');",
     "pc": "",
 }
 
