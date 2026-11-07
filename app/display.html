@@ -600,8 +600,7 @@
   #guideNav .dots i.on { background: var(--gold); }
   #guideNext { background: var(--gold); color: #111; border: 0; border-radius: 99px; padding: .6em 1.5em; font: inherit; font-weight: 650; cursor: pointer; }
   #guideBack { background: none; border: 0; color: var(--dim); font: inherit; cursor: pointer; padding: .6em .4em; }
-  #guideSkip { position: absolute; top: max(14px, env(safe-area-inset-top)); right: 16px; background: none; border: 0; color: var(--dim);
-    font: inherit; font-size: clamp(14px, 2.6vmin, 17px); cursor: pointer; padding: .5em; }
+  #guideSkip { background: none; border: 0; color: var(--dim); font: inherit; cursor: pointer; padding: .6em .4em; }
   #guideSkip:hover, #guideBack:hover { color: var(--fg); }
   #updDot { position: absolute; top: 18%; right: 18%; width: 9px; height: 9px; border-radius: 50%; background: var(--gold); display: none; }
   #tb-settings { position: relative; }
@@ -1037,7 +1036,6 @@
 
 <!-- first-time guide -->
 <div id="guide" role="dialog" aria-modal="true" aria-label="Welcome to Liner Notes">
-  <button id="guideSkip">Skip</button>
   <div id="guideCard">
     <div class="gStep on">
       <h2>Welcome to Liner Notes</h2>
@@ -1068,7 +1066,7 @@
       </ul>
     </div>
     <div id="guideNav"><div class="dots"><i class="on"></i><i></i><i></i><i></i></div>
-      <button id="guideBack" style="visibility:hidden">Back</button><button id="guideNext">Next</button></div>
+      <button id="guideSkip">Skip intro</button><button id="guideBack" style="display:none">Back</button><button id="guideNext">Next</button></div>
   </div>
 </div>
 
@@ -3227,7 +3225,8 @@ function guideGo(n) {
   guideStep = Math.max(0, Math.min(n, steps.length - 1));
   steps.forEach((x, i) => x.classList.toggle("on", i === guideStep));
   document.querySelectorAll("#guideNav .dots i").forEach((x, i) => x.classList.toggle("on", i === guideStep));
-  $("guideBack").style.visibility = guideStep ? "visible" : "hidden";
+  $("guideBack").style.display = guideStep ? "" : "none";        // after the first page: Back and Next only
+  $("guideSkip").style.display = guideStep ? "none" : "";
   $("guideNext").textContent = guideStep === steps.length - 1 ? "Done" : "Next";
 }
 function openGuide() {
