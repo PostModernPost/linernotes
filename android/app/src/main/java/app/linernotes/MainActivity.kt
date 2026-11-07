@@ -161,6 +161,8 @@ class MainActivity : Activity() {
         Engine.start(this)
         io.execute {
             val ok = Engine.waitReady(this)
+            // On its own the phone doesn't listen until you turn listening on (the switch by "Listening is off")
+            if (ok) Link.call(this, Engine.URL, "/api/config", "POST", """{"listening_paused":true}""")
             main.post {
                 if (!ok) { say(JSONObject().put("view", "error").put("msg", "Liner Notes couldn't start on this phone.")); return@post }
                 open(Engine.URL)
