@@ -33,7 +33,9 @@
   /* square-ish windows: a smaller cover so the song details below it still fit */
   @media (max-aspect-ratio: 7/5) and (min-aspect-ratio: 4/5) { #art { height: min(48vh, 92vw); } }
 
-  @media (min-aspect-ratio: 7/5) and (max-height: 520px) { #art { height: 78vh; } #side { max-width: 58vw; } }
+  /* a phone on its side: the cover as tall as the screen allows */
+  @media (min-aspect-ratio: 7/5) and (max-height: 520px) {
+    #stage { padding: 3vmin 4vmin; } #art { height: calc(100vh - 6vmin); } #side { max-width: 58vw; } }
   .sizes { display: flex; gap: 1.2vmin; flex-wrap: wrap; justify-content: flex-end; }
   #art { aspect-ratio: 1; border-radius: 6px; object-fit: cover; box-shadow: 0 20px 60px rgba(0,0,0,.6);
     background: #1a1a1d; transition: opacity .6s; flex: none; }
