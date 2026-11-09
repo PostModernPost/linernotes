@@ -353,7 +353,12 @@ class MainActivity : Activity() {
                 requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), 2)   // the PC listens through this phone
             }
         }
-        if (LinkService.screenOffWanted) { if (!dark) goDark() }
+        if (LinkService.screenOffWanted) {
+            // Just woken (the PC came back, or the next song): stay at normal brightness for a minute first
+            val wait = wokeAt + 60_000 - System.currentTimeMillis()
+            if (!dark && wait > 0) { main.removeCallbacks(darkLater); main.postDelayed(darkLater, wait) }
+            else if (!dark) goDark()
+        }
         else if (j != null && j.optJSONObject("track")?.optString("status") == "playing") {
             // A song is playing: the screen stays on, whatever the page did (on a plain charger nothing else holds it)
             if (dark || !keptOn) keepOn(true)
@@ -385,6 +390,9 @@ class MainActivity : Activity() {
         }
     }
 
+    private var wokeAt = 0L
+    private val darkLater = Runnable { if (LinkService.screenOffWanted && !dark) goDark() }
+
     /** Nothing playing for a while: go black and let the phone's own screen timeout switch it off. */
     private fun goDark() {
         dark = true
@@ -394,7 +402,7 @@ class MainActivity : Activity() {
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
-        if (!LinkService.screenOffWanted) { keepOn(true) }   // LinkService woke the screen for the next song
+        wokeAt = System.currentTimeMillis(); keepOn(true)   // LinkService woke the screen: normal brightness, and a minute before it may go dark
     }
 
     override fun onResume() {
