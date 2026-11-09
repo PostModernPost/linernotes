@@ -646,7 +646,7 @@
       <form id="aaName"><input class="field" id="aaTitle" placeholder="Album name" autocomplete="off" aria-label="Album name">
         <input class="field" id="aaArtist" placeholder="Various Artists" autocomplete="off" aria-label="Album artist"><button class="pill" type="submit">Save</button></form></div>
     <div class="looking" id="looking"><i></i><span id="lookingText">Still listening</span></div>
-    <div id="actRow"><button id="listenBtn" class="listenBtn">Listen now</button><button id="findBtn">Manual search</button></div>
+    <div id="actRow"><button id="listenBtn" class="listenBtn">Listen now</button><button id="stopListenBtn" class="listenBtn" title="Turn listening off until you turn it back on">Stop listening</button><button id="findBtn">Manual search</button></div>
   </div>
 </div>
 
@@ -1209,6 +1209,7 @@ function render(t, keepArt) {
   $("mediumBtn").style.display = inRoom && !unknown ? "inline-flex" : "none";
   $("findBtn").style.display = unknown ? "inline-block" : "none";
   $("listenBtn").style.display = unknown && ["turntable", "record", "manual"].includes(t.source) ? "inline-block" : "none";
+  $("stopListenBtn").style.display = $("listenBtn").style.display;
   $("heartBtn").style.display = unknown ? "none" : "grid";
   $("shareBtn").style.display = unknown ? "none" : "grid";
   $("lyShare").style.visibility = unknown ? "hidden" : "visible";
@@ -1808,6 +1809,7 @@ function listenNowProgress(state) {
 }
 $("listenBtn").addEventListener("click", listenNow);
 $("listenBtn2").addEventListener("click", listenNow);
+$("stopListenBtn").addEventListener("click", () => setListening(false));     // not music, just the room: stop trying
 
 // ---------------------------------------------------------------- mic meter and sensitivity (settings)
 let meterTimer = null;
