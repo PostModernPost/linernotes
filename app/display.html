@@ -617,6 +617,15 @@
   html.in-app .pc-only { display: none !important; }
   html:not(.in-app) .app-only { display: none !important; }
   html.app-solo .not-solo, html.app-pc .not-app-pc, html:not(.app-pc) .app-pc-only, html:not(.app-solo) .solo-only { display: none !important; }
+  /* ---------- keep clear of a phone's camera cutout (a Pixel on its side has it at one edge).
+     The Android app sets --cl/--cr itself; browsers that report the cutout use env(). */
+  :root { --cl: env(safe-area-inset-left, 0px); --cr: env(safe-area-inset-right, 0px); }
+  #stage { margin-left: var(--cl); margin-right: var(--cr); }
+  #idle, #idleShow, .panel, #guide { left: var(--cl); right: var(--cr); }
+  #toolbar { right: calc(2vmin + var(--cr)); }
+  #fsBtn { right: calc(2vmin + var(--cr)); }
+  #micInd { left: calc(3vmin + var(--cl)); }
+  #updPill { left: calc(2vmin + var(--cl)); }
 </style>
 </head>
 <body>

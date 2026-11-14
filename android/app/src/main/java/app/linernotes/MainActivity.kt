@@ -77,6 +77,12 @@ class MainActivity : Activity() {
             override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean = openOutside(request.url)
             @Deprecated("old WebView")
             override fun shouldOverrideUrlLoading(view: WebView, url: String): Boolean = openOutside(Uri.parse(url))
+            override fun onPageFinished(view: WebView, url: String) { pushCutout() }
+        }
+        // The camera cutout moves with the phone: tell the page each time, so the cover stays clear of it
+        web.setOnApplyWindowInsetsListener { v, insets ->
+            main.post { pushCutout() }
+            v.onApplyWindowInsets(insets)
         }
         web.webChromeClient = object : WebChromeClient() {
             // links that open a new tab (Spotify, Discogs, Buy me a coffee...) open in the phone's browser
@@ -261,6 +267,16 @@ class MainActivity : Activity() {
         val here = Link.call(this, Engine.URL, "/api/sync", timeoutMs = 10_000)?.takeIf { it.first == 200 } ?: return
         Link.call(this, Engine.URL, "/api/sync", "POST", there.second, timeoutMs = 20_000)
         Link.call(this, pc, "/api/sync", "POST", here.second, timeoutMs = 20_000)
+    }
+
+    /** Where the camera cutout is (left/right edge when the phone is on its side), for the page's spacing. */
+    private fun pushCutout() {
+        if (Build.VERSION.SDK_INT < 28) return
+        val cut = window.decorView.rootWindowInsets?.displayCutout
+        val d = resources.displayMetrics.density
+        val l = (cut?.safeInsetLeft ?: 0) / d
+        val r = (cut?.safeInsetRight ?: 0) / d
+        web.evaluateJavascript("(function(s){s.setProperty('--cl','${l}px');s.setProperty('--cr','${r}px')})(document.documentElement.style)", null)
     }
 
     /** A short message on the page (the page shows it like its own). */
